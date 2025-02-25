@@ -3,6 +3,7 @@
 # Table name: form_fields
 #
 #  id                 :integer          not null, primary key
+#  completed          :boolean          default(FALSE)
 #  field_type         :string           not null
 #  height             :float            not null
 #  page_number        :integer          not null

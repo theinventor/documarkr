@@ -3,16 +3,19 @@
 # Table name: document_signers
 #
 #  id          :integer          not null, primary key
+#  email       :string
 #  ip_address  :string
+#  name        :string
 #  order       :integer          default(0)
 #  signed_at   :datetime
 #  status      :integer          default("pending")
+#  token       :string
 #  user_agent  :string
 #  viewed_at   :datetime
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  document_id :integer          not null
-#  user_id     :integer          not null
+#  user_id     :integer
 #
 # Indexes
 #
@@ -27,14 +30,18 @@
 #
 class DocumentSigner < ApplicationRecord
   belongs_to :document
-  belongs_to :user
+  belongs_to :user, optional: true
   has_many :form_fields, dependent: :destroy
 
+  validates :name, presence: true
+  validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+
+  before_create :generate_token
+
   enum :status, {
-    pending: 0,
-    viewed: 1,
-    signed: 2,
-    declined: 3
+    pending: "pending",
+    completed: "completed",
+    declined: "declined"
   }, default: "pending"
 
   scope :pending, -> { where(status: :pending) }
@@ -56,5 +63,32 @@ class DocumentSigner < ApplicationRecord
       ip_address: request.remote_ip,
       user_agent: request.user_agent
     )
+  end
+
+  def signing_url
+    document.signing_url_for(self)
+  end
+
+  def completed_all_required_fields?
+    required_fields = form_fields.required
+    return false if required_fields.empty?
+    required_fields.all?(&:complete?)
+  end
+
+  def mark_as_completed!
+    return if completed?
+
+    update(
+      status: :completed,
+      completed_at: Time.current
+    )
+
+    document.check_completion_status
+  end
+
+  private
+
+  def generate_token
+    self.token ||= SecureRandom.urlsafe_base64(32)
   end
 end

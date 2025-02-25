@@ -12,6 +12,16 @@ Rails.application.configure do
     policy.object_src  :none
     policy.script_src  :self, :https, :unsafe_inline
     policy.style_src   :self, :https, :unsafe_inline
+
+    # Add worker-src directive for PDF.js
+    policy.worker_src  :self, :blob
+
+    # Allow connecting to PDF.js worker
+    policy.connect_src :self, :blob, :https
+
+    # Allow child-src for PDF.js iframe support if needed
+    policy.frame_src   :self, :blob
+
     # Specify URI for violation reports
     # policy.report_uri "/csp-violation-report-endpoint"
   end

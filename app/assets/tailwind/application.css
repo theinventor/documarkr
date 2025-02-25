@@ -102,7 +102,11 @@
 }
 
 .pdf-loading.hidden {
-  display: none;
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
 }
 
 .pdf-page-container {
@@ -132,9 +136,68 @@
 
 /* Signature field styles */
 .signature-field {
-  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(99, 102, 241, 0.1);
+  border: 2px dashed #4f46e5;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 10;
+  overflow: hidden;
 }
 
+.signature-field .field-label {
+  color: #4f46e5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+}
+
+.signature-field .field-label svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+}
+
+.field-signature {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.field-initials {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.field-text {
+  background-color: rgba(52, 211, 153, 0.1);
+  border-color: #34d399;
+}
+
+.field-text .field-label {
+  color: #059669;
+}
+
+.field-date {
+  background-color: rgba(251, 146, 60, 0.1);
+  border-color: #fb923c;
+}
+
+.field-date .field-label {
+  color: #ea580c;
+}
+
+.field-checkbox {
+  background-color: rgba(139, 92, 246, 0.1);
+  border-color: #8b5cf6;
+}
+
+.field-checkbox .field-label {
+  color: #7c3aed;
+}
+
+/* Restored signature box style */
 .signature-box {
   border: 2px dashed #d1d5db;
   border-radius: 0.375rem;

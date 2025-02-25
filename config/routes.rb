@@ -5,6 +5,20 @@ Rails.application.routes.draw do
     member do
       get :download
     end
+    resources :document_signers, only: [ :new, :create, :destroy, :index ]
+    resources :form_fields, only: [ :create, :update, :destroy, :index ] do
+      collection do
+        post :debug_click
+      end
+    end
+
+    # Document signing routes
+    get "sign/:token", to: "documents#sign", as: "sign"
+    post "sign", to: "documents#sign_complete"
+    get "complete", to: "documents#complete", as: "complete"
+
+    # Form field completion
+    post "form_fields/:field_id/complete", to: "documents#complete_field", as: "complete_field"
   end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

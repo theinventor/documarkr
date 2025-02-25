@@ -11,6 +11,7 @@ class CreateFormFields < ActiveRecord::Migration[8.0]
       t.float :height, null: false
       t.text :value  # stores the completed field value (e.g., signature image data)
       t.boolean :required, default: true
+      t.boolean :completed, default: false
 
       t.timestamps
     end

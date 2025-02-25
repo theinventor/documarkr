@@ -1,0 +1,67 @@
+<%# Document Completion Page %>
+<div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6">
+  <div class="max-w-md w-full bg-white rounded-lg shadow-lg overflow-hidden">
+    <div class="bg-green-500 px-6 py-8 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <h1 class="mt-4 text-2xl font-bold text-white">Signing Complete!</h1>
+      <p class="mt-2 text-white text-opacity-90">
+        Thank you for signing "<%= @document.title %>"
+      </p>
+    </div>
+    
+    <div class="p-6">
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">What happens next?</h2>
+        <p class="text-gray-600">
+          All parties will be notified when the document has been completed by all signers.
+          You will receive a copy of the fully executed document by email.
+        </p>
+      </div>
+      
+      <div class="border-t border-gray-200 pt-4 pb-2">
+        <h3 class="text-sm font-medium text-gray-700 mb-2">Document details:</h3>
+        <div class="flex flex-col space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">Document name:</span>
+            <span class="text-gray-900 font-medium"><%= @document.title %></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Signed on:</span>
+            <span class="text-gray-900 font-medium"><%= Time.current.strftime('%B %d, %Y at %I:%M %p') %></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Document ID:</span>
+            <span class="text-gray-900 font-medium"><%= @document.id %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-gray-200">
+      <% if @document.all_signed? %>
+        <a href="<%= rails_blob_path(@document.file) %>" class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" download>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download Document
+        </a>
+      <% else %>
+        <div class="text-sm text-gray-600">
+          Waiting for other signers to complete...
+        </div>
+      <% end %>
+      
+      <a href="<%= root_path %>" class="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+        Back to Dashboard
+      </a>
+    </div>
+  </div>
+  
+  <div class="mt-8 text-center text-sm text-gray-500">
+    <p>
+      Thank you for using DocuMarkr. If you have any questions, please contact support.
+    </p>
+  </div>
+</div> 
