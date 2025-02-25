@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  title: MyString
+  message: MyText
+  status: 1
+  creator: one
+  completed_at: 2025-02-25 11:31:58
+
+two:
+  title: MyString
+  message: MyText
+  status: 1
+  creator: two
+  completed_at: 2025-02-25 11:31:58

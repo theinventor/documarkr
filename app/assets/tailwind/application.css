@@ -1,0 +1,288 @@
+@import "tailwindcss";
+
+/* Custom Tailwind variables */
+:root {
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+  
+  --color-error-50: #fef2f2;
+  --color-error-100: #fee2e2;
+  --color-error-200: #fecaca;
+  --color-error-300: #fca5a5;
+  --color-error-400: #f87171;
+  --color-error-500: #ef4444;
+  --color-error-600: #dc2626;
+  --color-error-700: #b91c1c;
+  --color-error-800: #991b1b;
+  --color-error-900: #7f1d1d;
+}
+
+/* Document header styles */
+.document-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+/* Status badge styles */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.status-badge.status-draft {
+  background-color: var(--color-primary-100);
+  color: var(--color-primary-800);
+}
+
+.status-badge.status-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.status-signed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.status-completed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.status-rejected,
+.status-badge.status-declined {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.status-badge.status-expired {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+/* Document actions */
+.document-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* PDF viewer styles */
+.pdf-container {
+  min-height: 400px;
+  position: relative;
+}
+
+.pdf-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.8);
+  z-index: 10;
+}
+
+.pdf-loading.hidden {
+  display: none;
+}
+
+.pdf-page-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+  padding: 1rem;
+  max-width: 100%;
+}
+
+.pdf-page {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  margin-bottom: 1rem;
+  max-width: 100%;
+}
+
+.more-pages {
+  text-align: center;
+  padding: 1rem;
+  background: #f3f4f6;
+  border-radius: 0.375rem;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+/* Signature field styles */
+.signature-field {
+  margin-top: 1.5rem;
+}
+
+.signature-box {
+  border: 2px dashed #d1d5db;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  background-color: #f9fafb;
+  touch-action: none;
+  min-height: 6rem;
+}
+
+/* Document progress styles */
+.document-progress {
+  margin-top: 1.5rem;
+}
+
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+@media (min-width: 640px) {
+  .progress-steps {
+    flex-direction: row;
+  }
+}
+
+.progress-step {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 640px) {
+  .progress-step:not(:last-child):after {
+    content: "";
+    position: absolute;
+    top: 1rem;
+    width: calc(100% - 2.5rem);
+    height: 1px;
+    background-color: #e5e7eb;
+    left: 1.25rem;
+    transform: translateY(-50%);
+    z-index: 0;
+  }
+  
+  .progress-step.completed:not(:last-child):after,
+  .progress-step.active:not(:last-child):after {
+    background-color: #4f46e5;
+  }
+}
+
+.step-indicator {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #e5e7eb;
+  margin-right: 0.75rem;
+  z-index: 10;
+}
+
+.progress-step.completed .step-indicator {
+  background-color: #4f46e5;
+  color: white;
+  border-color: #4f46e5;
+}
+
+.progress-step.active .step-indicator {
+  background-color: white;
+  color: #4f46e5;
+  border-color: #4f46e5;
+  font-weight: 600;
+}
+
+.step-content {
+  flex: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pdf-container {
+    background-color: #1f2937;
+  }
+  
+  .more-pages {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+  
+  .progress-step:not(:last-child):after {
+    background-color: #374151;
+  }
+  
+  .step-indicator {
+    background-color: #1f2937;
+    color: #9ca3af;
+    border-color: #374151;
+  }
+  
+  .signature-box {
+    border-color: #4b5563;
+    background-color: #1f2937;
+  }
+}
+
+/* File input styling */
+input[type="file"] {
+  width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 1rem;
+  border: 0;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  background-color: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background-color: #e0e7ff;
+}
+
+/* Animation utilities */
+.pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+/* Add transition for notifications */
+[data-controller="notification"] {
+  transition: opacity 300ms ease-in-out;
+}
