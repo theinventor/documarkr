@@ -62,6 +62,13 @@ end
 group :development do
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
+
+  # Better error pages with REPL [https://github.com/BetterErrors/better_errors]
+  gem "better_errors"
+  gem "binding_of_caller"
+
+  # Annotate models with schema info [https://github.com/drwl/annotaterb]
+  gem "annotaterb"
 end
 
 group :test do
