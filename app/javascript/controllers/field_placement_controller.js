@@ -71,6 +71,9 @@ export default class extends Controller {
       // Keyboard events for canceling
       document.addEventListener("keydown", this.handleKeyDown.bind(this))
       
+      // Add window resize listener to handle container size changes
+      window.addEventListener("resize", this.handleWindowResize.bind(this))
+      
       console.log("Event listeners set up successfully")
     } else {
       console.warn("Container target not found, cannot set up event listeners")
@@ -83,6 +86,7 @@ export default class extends Controller {
       window.removeEventListener("mousemove", this.handleMouseMove.bind(this))
       window.removeEventListener("mouseup", this.handleMouseUp.bind(this))
       document.removeEventListener("keydown", this.handleKeyDown.bind(this))
+      window.removeEventListener("resize", this.handleWindowResize.bind(this))
     }
   }
   
@@ -290,92 +294,102 @@ export default class extends Controller {
 
   handleMouseDown(event) {
     console.log("handleMouseDown triggered");
-    console.log(`Selected field type: ${this.selectedFieldType}`);
-    console.log(`Signer ID: ${this.signerIdValue}`);
     
-    // Only start placing a field if a field type is selected and we have a signer
-    if (!this.selectedFieldType || !this.signerIdValue) {
-      console.log(`Field placement prevented: selectedFieldType=${this.selectedFieldType}, signerIdValue=${this.signerIdValue}`);
+    // Check if we're clicking on a resize handle
+    if (event.target.classList.contains('resize-handle')) {
+      this.handleResizeStart(event);
       return;
     }
     
-    // Prevent event from bubbling up
-    event.stopPropagation();
-    
-    console.log("Starting field placement");
-    
-    // Get the container rect to calculate relative positions
-    this.containerRect = this.containerTarget.getBoundingClientRect();
-    
-    // Get the initial position
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    
-    // Calculate position relative to the container
-    const canvasX = event.clientX - this.containerRect.left;
-    const canvasY = event.clientY - this.containerRect.top;
-    
-    console.log(`Container rect: left=${this.containerRect.left}, top=${this.containerRect.top}, width=${this.containerRect.width}, height=${this.containerRect.height}`);
-    console.log(`Mouse position: clientX=${event.clientX}, clientY=${event.clientY}`);
-    console.log(`Canvas position: x=${canvasX}, y=${canvasY}`);
-    
-    // Create a placeholder field element
-    const fieldElement = document.createElement("div");
-    fieldElement.classList.add("signature-field", `field-${this.selectedFieldType}`);
-    fieldElement.id = `temp-field-${Date.now()}`;
-    fieldElement.style.position = "absolute";
-    
-    // Set the initial position of the field
-    fieldElement.style.left = `${canvasX}px`;
-    fieldElement.style.top = `${canvasY}px`;
-    fieldElement.style.width = "100px";
-    fieldElement.style.height = "50px";
-    
-    // Create field label with icon
-    const labelElement = document.createElement("div");
-    labelElement.classList.add("field-label");
-    
-    // Add icon based on field type
-    let iconSvg = "";
-    switch (this.selectedFieldType) {
-      case "signature":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M6 8a.5.5 0 0 0 .5.5h1.5a.5.5 0 0 0 0-1H6.5A.5.5 0 0 0 6 8zm2.5 1a.5.5 0 0 0 0 1h1.5a.5.5 0 0 0 0-1h-1.5zm1.5-3a.5.5 0 0 0 0-1h-1.5a.5.5 0 0 0 0 1H10zM8 7a.5.5 0 0 0-.5-.5H6a.5.5 0 0 0 0 1h1.5A.5.5 0 0 0 8 7zm0-3a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zM2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/></svg>';
-        labelElement.innerHTML = iconSvg + ' Signature';
-        break;
-      case "initials":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>';
-        labelElement.innerHTML = iconSvg + ' Initials';
-        break;
-      case "text":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/><path d="M3 5.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM3 8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 8zm0 2.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/></svg>';
-        labelElement.innerHTML = iconSvg + ' Text';
-        break;
-      case "date":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/></svg>';
-        labelElement.innerHTML = iconSvg + ' Date';
-        break;
-      case "checkbox":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.235.235 0 0 1 .02-.022z"/></svg>';
-        labelElement.innerHTML = iconSvg + ' Checkbox';
-        break;
+    // Only proceed if we have selected a field type and signer
+    if (!this.selectedFieldType || !this.signerIdValue) {
+      console.log("Field placement prevented: No field type or signer selected")
+      return
     }
     
-    fieldElement.appendChild(labelElement);
+    // Get container bounding rect
+    this.containerRect = this.containerTarget.getBoundingClientRect()
+    console.log("Container dimensions:", this.containerRect)
+    
+    // Calculate position relative to the container
+    const canvasX = event.clientX - this.containerRect.left
+    const canvasY = event.clientY - this.containerRect.top
+    console.log(`Mouse position relative to container: ${canvasX}, ${canvasY}`)
+    
+    // Save the starting position
+    this.startX = event.clientX
+    this.startY = event.clientY
+    
+    // Create a new field element
+    const fieldElement = document.createElement("div")
+    fieldElement.classList.add("signature-field", `field-${this.selectedFieldType}`)
+    fieldElement.style.position = "absolute"
+    
+    // Set position using percentage values instead of pixels
+    const xPercent = (canvasX / this.containerRect.width) * 100
+    const yPercent = (canvasY / this.containerRect.height) * 100
+    fieldElement.style.left = `${xPercent}%`
+    fieldElement.style.top = `${yPercent}%`
+    fieldElement.style.width = "100px"
+    fieldElement.style.height = "50px"
+    
+    // Create field label with icon
+    const labelElement = document.createElement("div")
+    labelElement.classList.add("field-label")
+    
+    // Add icon based on field type
+    let iconSvg = ""
+    let labelText = ""
+    
+    switch (this.selectedFieldType) {
+      case "signature":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M6 8a.5.5 0 0 0 .5.5h1.5a.5.5 0 0 0 0-1H6.5A.5.5 0 0 0 6 8zm2.5 1a.5.5 0 0 0 0 1h1.5a.5.5 0 0 0 0-1h-1.5zm1.5-3a.5.5 0 0 0 0-1h-1.5a.5.5 0 0 0 0 1H10zM8 7a.5.5 0 0 0-.5-.5H6a.5.5 0 0 0 0 1h1.5A.5.5 0 0 0 8 7zm0-3a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zM2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/></svg>'
+        labelText = "Signature"
+        break
+      case "initials":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>'
+        labelText = "Initials"
+        break
+      case "text":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/><path d="M3 5.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM3 8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 8zm0 2.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/></svg>'
+        labelText = "Text"
+        break
+      case "date":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/></svg>'
+        labelText = "Date"
+        break
+      case "checkbox":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.235.235 0 0 1 .02-.022z"/></svg>'
+        labelText = "Checkbox"
+        break
+    }
+    
+    labelElement.innerHTML = iconSvg + ' ' + labelText
+    fieldElement.appendChild(labelElement)
+    
+    // Add resize handles to the field
+    this.addResizeHandles(fieldElement)
     
     // Add the field to the container
-    this.containerTarget.appendChild(fieldElement);
+    this.containerTarget.appendChild(fieldElement)
     
     // Store the active field element
-    this.activeFieldElement = fieldElement;
+    this.activeFieldElement = fieldElement
     
     // Prevent default behavior
-    event.preventDefault();
+    event.preventDefault()
     
     // Send debug info to the server
-    this.debugMouseEvent(event, 'mouse_down');
+    this.debugMouseEvent(event, 'mouse_down')
   }
 
   handleMouseMove(event) {
+    // Handle resize operation if active
+    if (this.isResizing && this.activeFieldElement && this.resizeData) {
+      this.handleResize(event);
+      return;
+    }
+
     if (!this.activeFieldElement || !this.selectedFieldType) {
       return
     }
@@ -396,6 +410,12 @@ export default class extends Controller {
   }
 
   handleMouseUp(event) {
+    // Handle resize operation end if active
+    if (this.isResizing && this.activeFieldElement) {
+      this.handleResizeEnd(event);
+      return;
+    }
+
     if (!this.activeFieldElement || !this.selectedFieldType || !this.signerIdValue) {
       return
     }
@@ -404,14 +424,39 @@ export default class extends Controller {
     const width = parseFloat(this.activeFieldElement.style.width)
     const height = parseFloat(this.activeFieldElement.style.height)
     
-    // Calculate final position in percentages relative to container
-    const fieldLeft = parseFloat(this.activeFieldElement.style.left)
-    const fieldTop = parseFloat(this.activeFieldElement.style.top)
+    // Convert pixel dimensions to percentages
+    let widthPercent, heightPercent;
     
-    const xPercent = (fieldLeft / this.containerRect.width) * 100
-    const yPercent = (fieldTop / this.containerRect.height) * 100
-    const widthPercent = (width / this.containerRect.width) * 100
-    const heightPercent = (height / this.containerRect.height) * 100
+    if (this.activeFieldElement.style.width.endsWith('px')) {
+      widthPercent = (width / this.containerRect.width) * 100;
+      heightPercent = (height / this.containerRect.height) * 100;
+      
+      // Update element to use percentage-based dimensions
+      this.activeFieldElement.style.width = `${widthPercent}%`;
+      this.activeFieldElement.style.height = `${heightPercent}%`;
+    } else {
+      // If already in percentages, extract the values
+      widthPercent = parseFloat(this.activeFieldElement.style.width);
+      heightPercent = parseFloat(this.activeFieldElement.style.height);
+    }
+    
+    // Get position (should already be in percentages)
+    let xPercent, yPercent;
+    
+    if (this.activeFieldElement.style.left.endsWith('px')) {
+      const fieldLeft = parseFloat(this.activeFieldElement.style.left);
+      const fieldTop = parseFloat(this.activeFieldElement.style.top);
+      xPercent = (fieldLeft / this.containerRect.width) * 100;
+      yPercent = (fieldTop / this.containerRect.height) * 100;
+      
+      // Update element to use percentage-based positioning
+      this.activeFieldElement.style.left = `${xPercent}%`;
+      this.activeFieldElement.style.top = `${yPercent}%`;
+    } else {
+      // If already in percentages, extract the values
+      xPercent = parseFloat(this.activeFieldElement.style.left);
+      yPercent = parseFloat(this.activeFieldElement.style.top);
+    }
     
     // Create a unique field ID
     const fieldId = `field-${Date.now()}`
@@ -588,75 +633,85 @@ export default class extends Controller {
   }
 
   addFieldFromServer(fieldData) {
-    if (!this.hasContainerTarget) {
-      console.warn("No container target found")
-      return
-    }
+    console.log("Adding field from server:", fieldData)
     
-    // Get container dimensions
-    const containerRect = this.containerTarget.getBoundingClientRect()
+    // Create a field element
+    const fieldElement = document.createElement('div')
+    fieldElement.className = `signature-field field-${fieldData.field_type}`
+    fieldElement.dataset.fieldId = fieldData.id
     
-    // Create a new field element
-    const fieldElement = document.createElement("div")
-    fieldElement.classList.add("signature-field", `field-${fieldData.field_type}`)
-    fieldElement.id = `db-${fieldData.id}`
-    fieldElement.style.position = "absolute"
+    // Calculate position in percentages
+    const xPercent = fieldData.x_position
+    const yPercent = fieldData.y_position
+    const widthPercent = fieldData.width
+    const heightPercent = fieldData.height
     
-    // Position and size the field
-    fieldElement.style.left = `${(fieldData.x_position / 100) * containerRect.width}px`
-    fieldElement.style.top = `${(fieldData.y_position / 100) * containerRect.height}px`
-    fieldElement.style.width = `${(fieldData.width / 100) * containerRect.width}px`
-    fieldElement.style.height = `${(fieldData.height / 100) * containerRect.height}px`
+    // Set position and size using percentage values
+    fieldElement.style.left = `${xPercent}%`
+    fieldElement.style.top = `${yPercent}%`
+    fieldElement.style.width = `${widthPercent}%`
+    fieldElement.style.height = `${heightPercent}%`
     
-    // Create field label with icon
-    const labelElement = document.createElement("div")
-    labelElement.classList.add("field-label")
+    // Create a field label element
+    const labelElement = document.createElement('div')
+    labelElement.className = 'field-label'
     
-    // Add icon based on field type
-    let iconSvg = ""
-    let labelText = ""
-    
+    // Add appropriate icon for the field type
+    let fieldIcon = ''
     switch (fieldData.field_type) {
-      case "signature":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M6 8a.5.5 0 0 0 .5.5h1.5a.5.5 0 0 0 0-1H6.5A.5.5 0 0 0 6 8zm2.5 1a.5.5 0 0 0 0 1h1.5a.5.5 0 0 0 0-1h-1.5zm1.5-3a.5.5 0 0 0 0-1h-1.5a.5.5 0 0 0 0 1H10zM8 7a.5.5 0 0 0-.5-.5H6a.5.5 0 0 0 0 1h1.5A.5.5 0 0 0 8 7zm0-3a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0 0 1h1a.5.5 0 0 0 .5-.5zM2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/></svg>'
-        labelText = "Signature"
+      case 'signature':
+        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>'
         break
-      case "initials":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>'
-        labelText = "Initials"
+      case 'initials':
+        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>'
         break
-      case "text":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/><path d="M3 5.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM3 8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 8zm0 2.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/></svg>'
-        labelText = "Text"
+      case 'text':
+        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
         break
-      case "date":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/></svg>'
-        labelText = "Date"
+      case 'date':
+        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
         break
-      case "checkbox":
-        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.235.235 0 0 1 .02-.022z"/></svg>'
-        labelText = "Checkbox"
-        break
+      default:
+        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>'
     }
     
-    labelElement.innerHTML = iconSvg + ' ' + labelText
+    labelElement.innerHTML = fieldIcon
     fieldElement.appendChild(labelElement)
     
-    // Add the field to the container
+    // Add trash icon for deleting the field
+    const deleteButton = document.createElement('div')
+    deleteButton.className = 'field-delete-button'
+    deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
+    deleteButton.dataset.action = 'click->field-placement#deleteFieldFromPdf'
+    deleteButton.dataset.fieldId = fieldData.id
+    fieldElement.appendChild(deleteButton)
+    
+    // Add resize handles
+    this.addResizeHandles(fieldElement)
+    
+    // Add the field element to the container
     this.containerTarget.appendChild(fieldElement)
     
-    // Add field to our list
-    const newField = {
-      ...fieldData,
+    // Add to fields array
+    const fieldObj = {
+      id: `field-${Date.now()}`,
+      serverId: fieldData.id,
+      type: fieldData.field_type,
       element: fieldElement,
-      id: `db-${fieldData.id}`,
-      serverId: fieldData.id
+      x: xPercent,
+      y: yPercent,
+      width: widthPercent,
+      height: heightPercent,
+      pageNumber: fieldData.page_number,
+      signerId: fieldData.document_signer_id
     }
     
-    this.fields.push(newField)
+    this.fields.push(fieldObj)
     
-    // Add to the fields list in the UI
-    this.addFieldToList(`db-${fieldData.id}`, newField)
+    // Add field to the list
+    this.addFieldToList(fieldObj.id, fieldData)
+    
+    return fieldObj
   }
 
   saveField(fieldData, fieldId) {
@@ -777,5 +832,198 @@ export default class extends Controller {
     .catch(error => {
       console.error(`Error sending debug info for ${eventType}:`, error)
     })
+  }
+
+  // Add new methods for resize functionality
+  addResizeHandles(fieldElement) {
+    // Create the resize container
+    const resizersContainer = document.createElement("div");
+    resizersContainer.classList.add("resizers");
+    
+    // Create the 8 resize handles
+    const positions = ['top-left', 'top-middle', 'top-right', 
+                       'middle-right', 'bottom-right', 'bottom-middle', 
+                       'bottom-left', 'middle-left'];
+    
+    positions.forEach(position => {
+      const handle = document.createElement("div");
+      handle.classList.add("resize-handle", position);
+      handle.dataset.position = position;
+      resizersContainer.appendChild(handle);
+    });
+    
+    // Add the handles to the field
+    fieldElement.appendChild(resizersContainer);
+  }
+
+  handleResizeStart(event) {
+    this.isResizing = true;
+    
+    // Find the field element (parent of the resize handle)
+    let fieldElement = event.target.closest('.signature-field');
+    this.activeFieldElement = fieldElement;
+    
+    // Store the handle position
+    const handlePosition = event.target.dataset.position;
+    
+    // Store initial field size and position
+    const fieldRect = fieldElement.getBoundingClientRect();
+    const containerRect = this.containerTarget.getBoundingClientRect();
+    
+    this.resizeData = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: fieldRect.width,
+      startHeight: fieldRect.height,
+      startLeft: fieldRect.left - containerRect.left,
+      startTop: fieldRect.top - containerRect.top,
+      containerWidth: containerRect.width,
+      containerHeight: containerRect.height,
+      handlePosition: handlePosition
+    };
+    
+    event.preventDefault();
+  }
+
+  handleResize(event) {
+    if (!this.activeFieldElement || !this.resizeData) return;
+    
+    const rd = this.resizeData;
+    const dx = event.clientX - rd.startX;
+    const dy = event.clientY - rd.startY;
+    
+    let newWidth = rd.startWidth;
+    let newHeight = rd.startHeight;
+    let newLeft = rd.startLeft;
+    let newTop = rd.startTop;
+    
+    // Calculate new dimensions based on the handle being dragged
+    if (rd.handlePosition.includes('right')) {
+      newWidth = Math.max(rd.startWidth + dx, 30); // Minimum width of 30px
+    }
+    if (rd.handlePosition.includes('bottom')) {
+      newHeight = Math.max(rd.startHeight + dy, 30); // Minimum height of 30px
+    }
+    if (rd.handlePosition.includes('left')) {
+      const newRight = rd.startLeft + rd.startWidth;
+      newLeft = Math.min(rd.startLeft + dx, newRight - 30);
+      newWidth = newRight - newLeft;
+    }
+    if (rd.handlePosition.includes('top')) {
+      const newBottom = rd.startTop + rd.startHeight;
+      newTop = Math.min(rd.startTop + dy, newBottom - 30);
+      newHeight = newBottom - newTop;
+    }
+    
+    // Convert to percentages
+    const leftPercent = (newLeft / rd.containerWidth) * 100;
+    const topPercent = (newTop / rd.containerHeight) * 100;
+    const widthPercent = (newWidth / rd.containerWidth) * 100;
+    const heightPercent = (newHeight / rd.containerHeight) * 100;
+    
+    // Update field position and size with percentage values
+    this.activeFieldElement.style.left = `${leftPercent}%`;
+    this.activeFieldElement.style.top = `${topPercent}%`;
+    this.activeFieldElement.style.width = `${widthPercent}%`;
+    this.activeFieldElement.style.height = `${heightPercent}%`;
+    
+    event.preventDefault();
+  }
+
+  handleResizeEnd(event) {
+    if (!this.activeFieldElement) return;
+    
+    // Find the field in our fields array
+    const fieldId = this.activeFieldElement.id;
+    const fieldIndex = this.fields.findIndex(field => field.id === fieldId);
+    
+    if (fieldIndex !== -1) {
+      const field = this.fields[fieldIndex];
+      
+      // Update field position and dimensions
+      field.x_position = parseFloat(this.activeFieldElement.style.left);
+      field.y_position = parseFloat(this.activeFieldElement.style.top);
+      field.width = parseFloat(this.activeFieldElement.style.width);
+      field.height = parseFloat(this.activeFieldElement.style.height);
+      
+      // Save changes to server
+      if (field.serverId) {
+        this.updateFieldOnServer(field);
+      }
+    }
+    
+    // Clear resize data
+    this.isResizing = false;
+    this.resizeData = null;
+    
+    event.preventDefault();
+  }
+
+  updateFieldOnServer(field) {
+    // Create a FormData object to send to the server
+    const formData = new FormData();
+    
+    // Add field data
+    formData.append('form_field[x_position]', field.x_position);
+    formData.append('form_field[y_position]', field.y_position);
+    formData.append('form_field[width]', field.width);
+    formData.append('form_field[height]', field.height);
+    
+    // Send update to server
+    fetch(`/documents/${this.documentIdValue}/form_fields/${field.serverId}`, {
+      method: "PATCH",
+      body: formData,
+      headers: {
+        "X-CSRF-Token": document.querySelector("meta[name='csrf-token']").content
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log("Field updated successfully:", data);
+    })
+    .catch(error => {
+      console.error("Error updating field:", error);
+    });
+  }
+
+  handleWindowResize() {
+    // Update container rect when window is resized
+    if (this.hasContainerTarget) {
+      this.containerRect = this.containerTarget.getBoundingClientRect();
+      console.log("Window resized. New container dimensions:", this.containerRect);
+    }
+  }
+
+  // Add new method to handle deletion directly from the PDF view
+  deleteFieldFromPdf(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    const fieldId = event.currentTarget.dataset.fieldId
+    console.log(`Deleting field from PDF view: ${fieldId}`)
+    
+    // Find the field in our array
+    const fieldIndex = this.fields.findIndex(field => field.serverId === parseInt(fieldId))
+    
+    if (fieldIndex !== -1) {
+      const field = this.fields[fieldIndex]
+      
+      // Remove the field element from the DOM
+      if (field.element && field.element.parentNode) {
+        field.element.parentNode.removeChild(field.element)
+      }
+      
+      // Delete it from the server
+      this.deleteFieldFromServer(fieldId)
+      
+      // Remove the field from our array
+      this.fields.splice(fieldIndex, 1)
+      
+      // Remove the list item from the fields list
+      const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${field.id}"]`)
+      if (listItem) {
+        listItem.parentNode.removeChild(listItem)
+      }
+    }
   }
 }
