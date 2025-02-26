@@ -1,0 +1,19 @@
+Document Signing Request
+=======================
+
+Hello <%= @document_signer.name %>,
+
+<%= @creator.name %> has sent you a document to sign: <%= @document.title %>.
+
+<% if @document.message.present? %>
+Message from <%= @creator.name %>:
+"<%= @document.message %>"
+<% end %>
+
+Please visit the following link to view and sign the document:
+<%= @signing_url %>
+
+This link is unique to you and should not be shared with others.
+
+--
+This is an automated message from DocuMarkr. Please do not reply to this email. 

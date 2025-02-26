@@ -10,6 +10,11 @@ export default class extends Controller {
   }
 
   connect() {
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    console.log("%cPDF VIEWER CONTROLLER CONNECTED!!!", "color: red; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    
+    console.log("PDF Viewer controller connected");
     console.log("PDF Viewer connected, URL:", this.urlValue);
     this.pages = []
     this.currentPage = this.pageValue
@@ -23,6 +28,49 @@ export default class extends Controller {
     this.isZooming = false;
     this.lastZoomDirection = null; // 'in' or 'out'
     this.manualZoomMode = false; // Set to true after first manual zoom
+    
+    // Force initial scale to be 1.0 (100%)
+    this.currentScale = 1.0;
+    this.scaleValue = 1.0;
+    
+    // Add debugging function to check for duplicate pages
+    this.debugCheckDuplicatePages = () => {
+      console.log("=== CHECKING FOR DUPLICATE PAGES ===");
+      const pagesContainer = document.querySelector('.pdf-pages-container');
+      if (!pagesContainer) {
+        console.log("No pages container found!");
+        return;
+      }
+      
+      const pageContainers = pagesContainer.querySelectorAll('.pdf-page-container');
+      console.log(`Found ${pageContainers.length} page containers`);
+      
+      // Check for duplicate page numbers
+      const pageNumbers = {};
+      pageContainers.forEach(container => {
+        const pageNum = container.dataset.page;
+        if (!pageNumbers[pageNum]) {
+          pageNumbers[pageNum] = 1;
+        } else {
+          pageNumbers[pageNum]++;
+          console.warn(`DUPLICATE PAGE ${pageNum} FOUND! (${pageNumbers[pageNum]} occurrences)`);
+        }
+      });
+      
+      // Log page numbers found
+      console.log("Page numbers found:", Object.keys(pageNumbers).sort((a, b) => a - b).join(", "));
+      
+      // Check for any direct child page containers in the main container (outside pdf-pages-container)
+      const directPageContainers = this.containerTarget.querySelectorAll(':scope > .pdf-page-container');
+      if (directPageContainers.length > 0) {
+        console.warn(`Found ${directPageContainers.length} page containers directly in main container!`);
+      }
+    };
+    
+    // Run the duplicate page check a few seconds after connection
+    setTimeout(() => {
+      this.debugCheckDuplicatePages();
+    }, 3000);
     
     // Debug for zoom buttons
     setTimeout(() => {
@@ -337,285 +385,387 @@ export default class extends Controller {
   }
 
   async loadDocument() {
-    console.log("Loading document from URL:", this.urlValue);
-    this.isLoading = true
+    // First ensure PDF.js is loaded
+    await this.loadPdfJs();
+    
+    console.log("Loading PDF document from URL:", this.urlValue);
+    
+    // Clear any existing pages before loading a new document
+    // This prevents duplicate pages if the document is loaded multiple times
+    const existingPagesContainer = this.containerTarget.querySelector('.pdf-pages-container');
+    if (existingPagesContainer) {
+      console.log("Clearing existing pages container before loading new document");
+      existingPagesContainer.remove();
+    }
     
     try {
-      // Load the PDF document
-      console.log("Creating PDF loading task");
-      const loadingTask = this.pdfjsLib.getDocument(this.urlValue)
+      // Fetch the PDF document
+      const loadingTask = this.pdfjsLib.getDocument(this.urlValue);
+      this.pdfDoc = await loadingTask.promise;
+      console.log(`PDF document loaded successfully. Number of pages: ${this.pdfDoc.numPages}`);
       
-      console.log("Awaiting loading task promise");
-      this.pdfDoc = await loadingTask.promise
+      // Update page count display
+      this.updatePageCount();
       
-      console.log("PDF document loaded successfully with", this.pdfDoc.numPages, "pages");
+      // Initialize the pages array with the correct length
+      this.pages = new Array(this.pdfDoc.numPages + 1).fill(null); // +1 because PDF pages are 1-indexed
       
-      // Set page count
-      const numPages = this.pdfDoc.numPages
-      if (this.hasPageCountTarget) {
-        this.pageCountTarget.textContent = numPages
-      }
+      // Render all pages at once
+      await this.renderAllPages();
       
-      // Important: Set loading to false BEFORE rendering
-      this.isLoading = false
-      
-      // Force hide the loading indicator with multiple approaches
+      // Hide loading indicator
       this.hideLoadingIndicator();
       
-      // Initial page render
-      this.currentPage = 1
-      this.pageValue = 1
-      console.log("Rendering first page");
-      this.renderPage(this.currentPage)
+      // Run duplicate page check after rendering
+      setTimeout(() => {
+        this.debugCheckDuplicatePages();
+      }, 1000);
       
-      // Set initial zoom level display
-      if (this.hasZoomLevelTarget) {
-        this.updateZoomLevelDisplay()
-      }
-      
-      // Initialize navigation button states
-      this.updateNavigationButtons();
-      
-      console.log("Document loading complete");
+      // Dispatch event that the PDF is loaded
+      this.element.dispatchEvent(new CustomEvent('pdf-viewer:loaded', {
+        detail: {
+          pageCount: this.pdfDoc.numPages
+        },
+        bubbles: true
+      }));
     } catch (error) {
-      console.error('Error loading PDF:', error)
-      this.isLoading = false
-      
-      // Still hide loading but show error
+      console.error("Error loading PDF document:", error);
+      // Show error in the container
+      this.containerTarget.innerHTML = `
+        <div class="p-4 bg-red-100 text-red-700 rounded">
+          <p class="font-bold">Error loading document</p>
+          <p>${error.message}</p>
+        </div>
+      `;
       this.hideLoadingIndicator();
+    }
+  }
+
+  // Update page count display
+  updatePageCount() {
+    if (this.hasPageCountTarget && this.pdfDoc) {
+      this.pageCountTarget.textContent = this.pdfDoc.numPages;
+      console.log(`Updated page count display to ${this.pdfDoc.numPages} pages`);
+    } else {
+      console.warn("Could not update page count: Missing target or PDF document not loaded");
+    }
+  }
+
+  async renderAllPages() {
+    console.log(`Rendering all ${this.pdfDoc.numPages} pages`);
+    
+    // Create a container for all pages if it doesn't exist yet
+    let pagesContainer = this.containerTarget.querySelector('.pdf-pages-container');
+    
+    // If the container doesn't exist or we need to rebuild it
+    if (!pagesContainer) {
+      // Remove any existing page containers directly in the main container
+      const existingPageContainers = this.containerTarget.querySelectorAll('.pdf-page-container');
+      existingPageContainers.forEach(container => container.remove());
       
-      // Show error message where PDF would go
-      if (this.hasCanvasTarget) {
-        const container = this.canvasTarget.parentNode;
-        container.innerHTML = `
-          <div class="flex items-center justify-center h-full">
-            <div class="text-red-500 text-center p-4">
-              <p class="text-xl font-bold">Failed to load PDF</p>
-              <p class="mt-2">${error.message || 'Unknown error'}</p>
-            </div>
-          </div>
-        `;
+      // Create the pages container
+      pagesContainer = document.createElement('div');
+      pagesContainer.className = 'pdf-pages-container';
+      pagesContainer.style.display = 'flex';
+      pagesContainer.style.flexDirection = 'column';
+      pagesContainer.style.gap = '20px'; // Add space between pages
+      pagesContainer.style.zIndex = '1'; // Lower z-index than field elements
+      
+      // Save any existing fields before clearing the container
+      const existingFields = Array.from(this.containerTarget.querySelectorAll('.signature-field'));
+      
+      // Clear the container first
+      this.containerTarget.innerHTML = '';
+      this.containerTarget.appendChild(pagesContainer);
+      
+      // Re-add the fields if there were any
+      existingFields.forEach(field => {
+        this.containerTarget.appendChild(field);
+      });
+    }
+    
+    // Early check: if pagesContainer already has page containers, clear them out
+    // This prevents duplicate pages
+    if (pagesContainer.querySelectorAll('.pdf-page-container').length > 0) {
+      console.log("Clearing existing page containers to prevent duplicates");
+      pagesContainer.innerHTML = '';
+    }
+    
+    // Render each page
+    for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
+      const pageContainer = document.createElement('div');
+      pageContainer.className = 'pdf-page-container';
+      pageContainer.dataset.page = pageNum;
+      
+      // Create canvas for this page
+      const canvas = document.createElement('canvas');
+      canvas.id = `page-canvas-${pageNum}`; // Ensure unique ID
+      canvas.className = 'pdf-page';
+      pageContainer.appendChild(canvas);
+      
+      // Add to the pages container
+      pagesContainer.appendChild(pageContainer);
+      
+      // Store page info
+      this.pages[pageNum] = {
+        canvas: canvas,
+        isRendered: false
+      };
+      
+      // Render the page
+      await this.renderPage(pageNum);
+      
+      // Dispatch page change event after the first page is rendered
+      if (pageNum === 1) {
+        this.dispatchPageChangeEvent(1);
       }
     }
   }
 
   async renderPage(pageNum) {
-    console.log(`Starting to render page ${pageNum}`);
+    if (!this.pdfDoc) return;
     
-    // Don't render if we're still loading the document
-    if (this.isLoading) {
-      console.warn(`Attempted to render page ${pageNum} while document is still loading`);
-      return;
-    }
+    const page = await this.pdfDoc.getPage(pageNum);
     
-    console.log(`Rendering page ${pageNum}, current loading state:`, this.isLoading);
-    console.log(`Current scale before render: ${this.currentScale}, isZooming: ${this.isZooming}`);
-    // Another check for the loading indicator visibility
-    if (this.hasLoadingTarget) {
-      console.log(`Loading indicator visibility before render: display=${this.loadingTarget.style.display}, class=${this.loadingTarget.className}`);
-      // Force hide it again for safety
-      this.hideLoadingIndicator();
-    } else {
-      console.warn("No loading target found during page render");
-      // Try with direct querySelector
-      const loadingEl = document.querySelector('.pdf-loading');
-      if (loadingEl) {
-        console.log("Found loading element via querySelector during render");
-        loadingEl.classList.add('hidden');
-        loadingEl.style.display = 'none';
+    // Get the canvas for this page or create one if it doesn't exist
+    let canvas = document.getElementById(`page-canvas-${pageNum}`);
+    let container;
+    
+    if (!canvas) {
+      // Instead of creating a new container directly, first check if one exists
+      container = document.querySelector(`.pdf-page-container[data-page="${pageNum}"]`);
+      
+      if (container) {
+        // If container exists but canvas doesn't, just create the canvas
+        canvas = document.createElement('canvas');
+        canvas.id = `page-canvas-${pageNum}`;
+        canvas.className = 'pdf-page';
+        container.appendChild(canvas);
+      } else {
+        // Only create a new container if we can't find one for this page
+        container = document.createElement('div');
+        container.className = 'pdf-page-container';
+        container.dataset.page = pageNum;
+        
+        // Create canvas for this page
+        canvas = document.createElement('canvas');
+        canvas.id = `page-canvas-${pageNum}`;
+        canvas.className = 'pdf-page';
+        container.appendChild(canvas);
+        
+        // Find the pdf-pages-container to add to
+        const pagesContainer = document.querySelector('.pdf-pages-container');
+        if (pagesContainer) {
+          pagesContainer.appendChild(container);
+        } else {
+          // Fallback - add to the main container
+          this.containerTarget.appendChild(container);
+        }
       }
-    }
-
-    // Make sure page number is valid
-    if (pageNum < 1 || pageNum > this.pdfDoc.numPages) {
-      console.log(`Invalid page number: ${pageNum} (total pages: ${this.pdfDoc.numPages})`);
-      return;
+    } else {
+      // Find the existing container
+      container = canvas.closest('.pdf-page-container');
     }
     
-    // Update page number display
-    if (this.hasPageNumTarget) {
-      this.pageNumTarget.textContent = pageNum;
-    }
+    const ctx = canvas.getContext('2d');
+    
+    // Adjust scale based on the current scale factor
+    const viewport = page.getViewport({ scale: this.currentScale });
+    
+    // Set canvas dimensions to match the viewport
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    // Render the page
+    const renderContext = {
+      canvasContext: ctx,
+      viewport: viewport
+    };
     
     try {
-      // Get the page
-      console.log(`Getting page ${pageNum} from PDF document`);
-      const page = await this.pdfDoc.getPage(pageNum);
+      await page.render(renderContext);
+      console.log(`Page ${pageNum} rendered at scale ${this.currentScale}`);
       
-      // Create or find canvas for this page
-      let canvas = this.containerTarget.querySelector(`canvas[data-page="${pageNum}"]`);
-      if (!canvas) {
-        console.log(`Creating new canvas for page ${pageNum}`);
-        // Create new canvas
-        canvas = document.createElement('canvas');
-        canvas.setAttribute('data-page', pageNum);
-        this.containerTarget.appendChild(canvas);
-        
-        // Store page reference
-        this.pages[pageNum] = { canvas, rendered: false };
-      } else {
-        console.log(`Found existing canvas for page ${pageNum}`);
+      // If this is the first page and we're just rendering one page (not all pages),
+      // then dispatch the page change event
+      if (pageNum === 1 && !this.isRenderingAllPages) {
+        this.dispatchPageChangeEvent(1);
       }
       
-      // Get viewport at current scale
-      const containerWidth = this.containerTarget.clientWidth;
-      
-      // FIXED: Now we ALWAYS initialize at 100% scale
-      if (!this._initialScaleSet && !this.manualZoomMode) {
-        console.log("Setting initial scale to exactly 100%");
-        this.currentScale = 1.0; // Exactly 100%
-        this.scaleValue = 1.0;
-        this.updateZoomLevelDisplay();
-        this._initialScaleSet = true;
-        console.log(`Set initial scale to 100%`);
-      }
-      
-      const viewport = page.getViewport({ scale: this.currentScale });
-      
-      // Set canvas dimensions to match viewport
-      const context = canvas.getContext('2d');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      
-      // Render PDF page into canvas context
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport
-      }
-      
-      await page.render(renderContext).promise
-      
-      // Hide other pages
-      this.containerTarget.querySelectorAll('canvas').forEach(c => {
-        if (c !== canvas) {
-          c.classList.add('hidden')
-        } else {
-          c.classList.remove('hidden')
-        }
-      })
-      
-      // Mark page as rendered
-      this.pages[pageNum].rendered = true
-      
-      // Update navigation button states
-      this.updateNavigationButtons();
-      
-      // Trigger page changed event (Stimulus)
-      this.dispatch("pageChanged", { detail: { page: pageNum } })
-      
-      // Also dispatch a custom DOM event for non-Stimulus controllers
-      const customEvent = new CustomEvent('pdf-viewer:pageChanged', {
-        bubbles: true,
-        detail: { page: pageNum }
-      });
-      document.dispatchEvent(customEvent);
+      return true;
     } catch (error) {
-      console.error('Error rendering page:', error)
-    }
-  }
-
-  nextPage(event) {
-    // Prevent default behavior and stop propagation to avoid scrolling
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    
-    // Save current scroll position
-    const scrollPos = window.scrollY;
-    
-    if (this.currentPage < this.pdfDoc.numPages) {
-      this.currentPage++
-      this.pageValue = this.currentPage
-      this.renderPage(this.currentPage)
-      
-      // Restore scroll position after a brief delay
-      setTimeout(() => {
-        window.scrollTo({
-          top: scrollPos,
-          behavior: 'auto'
-        });
-      }, 10);
-      
-      // Return false to ensure the browser doesn't follow the href
+      console.error(`Error rendering page ${pageNum}:`, error);
       return false;
     }
-    
-    // Always return false to prevent default behavior
-    return false;
-  }
-
-  prevPage(event) {
-    // Prevent default behavior and stop propagation to avoid scrolling
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    
-    console.log(`prevPage called, current page: ${this.currentPage}, total pages: ${this.pdfDoc ? this.pdfDoc.numPages : 'unknown'}`);
-    
-    // Save current scroll position
-    const scrollPos = window.scrollY;
-    
-    if (this.currentPage > 1) {
-      console.log(`Navigating to previous page: ${this.currentPage - 1}`);
-      this.currentPage--
-      this.pageValue = this.currentPage
-      this.renderPage(this.currentPage)
-      
-      // Restore scroll position after a brief delay
-      setTimeout(() => {
-        window.scrollTo({
-          top: scrollPos,
-          behavior: 'auto'
-        });
-      }, 10);
-      
-      // Return false to ensure the browser doesn't follow the href
-      return false;
-    } else {
-      console.log("Already at first page, cannot go to previous page");
-    }
-    
-    // Always return false to prevent default behavior
-    return false;
   }
   
-  updateZoomLevelDisplay() {
-    // Add stack trace to see what's calling this method
-    console.log("updateZoomLevelDisplay called from:", new Error().stack);
+  // We'll keep these methods but modify them to work with all pages
+  zoomIn(event) {
+    event.preventDefault();
     
-    if (this.hasZoomLevelTarget) {
-      const percentage = Math.round(this.currentScale * 100)
-      console.log("Updating zoom level display to:", percentage + "%", "Current scale:", this.currentScale);
-      this.zoomLevelTarget.textContent = `${percentage}%`
+    // Calculate the new scale value
+    let newScale;
+    const currentPercent = Math.round(this.currentScale * 100);
+    
+    if (currentPercent < 100) {
+      // If below 100%, go to 100% directly
+      newScale = 1.0;
+    } else {
+      // Otherwise increase by 15%
+      newScale = this.currentScale + 0.15;
+    }
+    
+    // Max zoom of 300%
+    newScale = Math.min(newScale, 3.0);
+    
+    // Set the new scale value
+    this.currentScale = newScale;
+    
+    // Update display and trigger re-render
+    this.updateZoomLevelDisplay();
+    // Force a re-render of all pages with the new scale
+    this.scaleValueChanged();
+  }
+  
+  zoomOut(event) {
+    event.preventDefault();
+    
+    // Calculate the new scale value
+    let newScale;
+    const currentPercent = Math.round(this.currentScale * 100);
+    
+    if (currentPercent > 100) {
+      // If above 100%, go to 100% directly
+      newScale = 1.0;
+    } else {
+      // Otherwise decrease by 15%
+      newScale = this.currentScale - 0.15;
+    }
+    
+    // Min zoom of 50%
+    newScale = Math.max(newScale, 0.5);
+    
+    // Set the new scale value
+    this.currentScale = newScale;
+    
+    // Update display and trigger re-render
+    this.updateZoomLevelDisplay();
+    // Force a re-render of all pages with the new scale
+    this.scaleValueChanged();
+  }
+
+  // Legacy page navigation methods will be kept for compatibility but won't do anything
+  nextPage(event) {
+    event?.preventDefault();
+    // No-op - all pages are displayed
+  }
+  
+  prevPage(event) {
+    event?.preventDefault();
+    // No-op - all pages are displayed
+  }
+
+  // Scale value changed - re-render all pages
+  scaleValueChanged() {
+    console.log("Scale value changed to:", this.currentScale);
+    
+    // Find the pages container
+    const pagesContainer = document.querySelector('.pdf-pages-container');
+    if (!pagesContainer) {
+      console.warn("No pages container found - cannot apply zoom");
+      return;
+    }
+    
+    // Find all page containers
+    const allPages = pagesContainer.querySelectorAll('.pdf-page-container');
+    
+    if (allPages.length > 0 && this.pdfDoc) {
+      // Set flag to indicate we're rendering all pages
+      this.isRenderingAllPages = true;
       
-      // Dispatch scale change event for fields to respond to
-      this.dispatchScaleChangeEvent();
+      const firstPageCanvas = allPages[0].querySelector('canvas');
+      
+      // Calculate scroll position relative to first page height
+      let scrollRatio = 0;
+      if (firstPageCanvas) {
+        const rect = firstPageCanvas.getBoundingClientRect();
+        const scrollTop = window.scrollY;
+        scrollRatio = scrollTop / rect.height;
+      }
+      
+      // Store current scroll position for later
+      const renderPromises = [];
+      
+      // Re-render all pages with the new scale - without creating new elements
+      for (let i = 1; i <= this.pdfDoc.numPages; i++) {
+        renderPromises.push(this.renderPage(i));
+      }
+      
+      // After all pages are rendered, reset scroll position proportionally and dispatch scale change event
+      Promise.all(renderPromises).then(() => {
+        this.isRenderingAllPages = false;
+        
+        // First dispatch the scale change event after all rendering is done
+        this.dispatchScaleChangeEvent();
+        
+        if (scrollRatio > 0) {
+          const firstPageCanvas = pagesContainer.querySelector('.pdf-page-container canvas');
+          if (firstPageCanvas) {
+            const newRect = firstPageCanvas.getBoundingClientRect();
+            const newScrollY = scrollRatio * newRect.height;
+            window.scrollTo({
+              top: newScrollY,
+              behavior: 'auto'
+            });
+          }
+        }
+      });
+    } else {
+      console.warn("No pages to re-render or PDF document not loaded");
+    }
+  }
+
+  // Dispatch page change event - modified to include all pages info
+  dispatchPageChangeEvent(pageNum) {
+    this.element.dispatchEvent(new CustomEvent('pdf-viewer:pageChanged', {
+      detail: {
+        page: pageNum,
+        pageCount: this.pdfDoc ? this.pdfDoc.numPages : 0,
+        allPagesVisible: true,
+        scale: this.currentScale
+      },
+      bubbles: true
+    }));
+  }
+
+  updateZoomLevelDisplay() {
+    if (this.hasZoomLevelTarget) {
+      const percentage = Math.round(this.currentScale * 100);
+      console.log("Updating zoom level display to:", percentage + "%", "Current scale:", this.currentScale);
+      this.zoomLevelTarget.textContent = `${percentage}%`;
+      
+      // Don't dispatch scale change event here - let scaleValueChanged handle that
+      // after the re-rendering is complete
     } else {
       console.warn("No zoom level target found to update display");
     }
   }
   
-  // Add method to dispatch scale change event
+  // Dispatch scale change event
   dispatchScaleChangeEvent() {
-    console.log("Dispatching PDF scale change event:", this.currentScale);
-    
-    // Create and dispatch a custom event with scale information
-    const event = new CustomEvent('pdf-viewer:scaleChanged', {
-      bubbles: true,
+    console.log("Dispatching scale change event:", this.currentScale);
+    this.element.dispatchEvent(new CustomEvent('pdf-viewer:scaleChanged', {
       detail: {
-        scale: this.currentScale
-      }
-    });
+        scale: this.currentScale,
+        oldScale: this._oldScale || 1.0,
+        allPages: true,
+        pageCount: this.pdfDoc ? this.pdfDoc.numPages : 0
+      },
+      bubbles: true
+    }));
     
-    // TODO: CRITICAL ZOOM HANDLING - This event dispatch is essential for proper zoom behavior
-    // Modifying this or related scale handling code may reintroduce zoom bugs where:
-    // 1. Page navigation causes unintended zoom changes
-    // 2. Manual zoom operations aren't properly tracked
-    // 3. Fields don't scale correctly when the page is zoomed
-    // Always test thoroughly with page navigation and manual zoom when changing this code!
-    document.dispatchEvent(event);
+    // Store current scale as old scale for next change
+    this._oldScale = this.currentScale;
   }
   
   // This is called when the page value changes
@@ -626,36 +776,6 @@ export default class extends Controller {
     }
   }
   
-  // This is called when the scale value changes
-  scaleValueChanged() {
-    console.log(`scaleValueChanged called: scaleValue=${this.scaleValue}, currentScale=${this.currentScale}, isZooming=${this.isZooming}, _zoomingInProgress=${this._zoomingInProgress}`);
-    
-    // Completely bypass scale changes if we're in a manual zoom operation
-    if (this.isZooming || this._zoomingInProgress) {
-      console.log("PROTECTED: Ignoring automatic scale change during manual zoom operation");
-      return;
-    }
-    
-    // Check for very small differences caused by rounding errors
-    const scaleDiff = Math.abs(this.scaleValue - this.currentScale);
-    if (scaleDiff < 0.001) {
-      console.log("Ignoring insignificant scale change (less than 0.001)");
-      return;
-    }
-    
-    if (!this.isLoading && this.pdfDoc && this.scaleValue !== this.currentScale) {
-      console.log(`Applying scale change from ${this.currentScale} to ${this.scaleValue}`);
-      this.currentScale = this.scaleValue;
-      this.updateZoomLevelDisplay();
-      
-      // Re-render current page with new scale
-      if (this.pages[this.currentPage]) {
-        this.pages[this.currentPage].rendered = false;
-        this.renderPage(this.currentPage);
-      }
-    }
-  }
-
   // New robust method to hide loading indicator
   hideLoadingIndicator() {
     console.log("Attempting to hide loading indicator");
@@ -728,5 +848,45 @@ export default class extends Controller {
     
     // Update navigation buttons properly
     this.updateNavigationButtons();
+  }
+
+  // Trigger page changed event
+  triggerPageChangedEvent() {
+    if (!this.pdfDoc) return;
+    
+    // Get the current scale
+    const scale = this.currentScale || 1;
+    
+    // Check if all pages are rendered
+    const allPagesVisible = this.pdfDoc && this.pages.filter(p => p !== null).length === this.pdfDoc.numPages + 1;
+    
+    const detail = {
+      page: this.currentPage,
+      pageCount: this.pdfDoc.numPages,
+      allPagesVisible: allPagesVisible,
+      scale: scale
+    };
+    
+    console.log('Triggering page changed event with details:', detail);
+    
+    // Create and dispatch the event
+    const event = new CustomEvent('pdf-viewer:pageChanged', {
+      detail: detail,
+      bubbles: true
+    });
+    
+    // Dispatch with a small delay to ensure all rendering has completed
+    setTimeout(() => {
+      this.element.dispatchEvent(event);
+      
+      // Fire an additional event after a short delay to ensure field visibility
+      setTimeout(() => {
+        const additionalEvent = new CustomEvent('pdf-viewer:fieldsCheck', {
+          detail: { ...detail, check: 'visibility' },
+          bubbles: true
+        });
+        this.element.dispatchEvent(additionalEvent);
+      }, 300);
+    }, 50);
   }
 } 

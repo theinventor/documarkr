@@ -1,6 +1,6 @@
 class DocumentsController < ApplicationController
   before_action :authenticate_user!
-  before_action :set_document, only: [ :show, :edit, :update, :destroy, :download ]
+  before_action :set_document, only: [ :show, :edit, :update, :destroy, :download, :send_to_signers ]
   before_action :authorize_document, only: [ :edit, :update, :destroy ]
 
   def index
@@ -90,6 +90,9 @@ class DocumentsController < ApplicationController
     @document = Document.find(params[:id])
     @document_signer = @document.document_signers.find_by!(token: @token)
 
+    # Record that the signer has viewed the document
+    @document_signer.record_view(request) if @document_signer.pending?
+
     # Load form fields assigned to this signer, ordered by page number
     @form_fields = @document.form_fields.where(document_signer_id: @document_signer.id)
                            .order(:page_number, :created_at)
@@ -103,26 +106,31 @@ class DocumentsController < ApplicationController
   # POST /documents/:id/sign
   def sign_complete
     @document = Document.find(params[:id])
+    @token = params[:token]
+    @document_signer = @document.document_signers.find_by!(token: @token)
 
-    # In a real application, you'd verify the signer and mark their fields as completed
-    # For now, we'll just mark the document as signed by this user
-
-    # Get the document signer from the session or params
-    signer_id = params[:signer_id]
-    document_signer = @document.document_signers.find(signer_id)
-
-    # Mark the signer as having completed their part
-    document_signer.update(status: "completed", completed_at: Time.current)
-
-    # Log this activity
-    @document.log_activity(current_user, "signed", request.remote_ip, request.user_agent)
-
-    # If all signers have completed, mark the document as completed
-    if @document.document_signers.where.not(status: "completed").none?
-      @document.update(status: "completed", completed_at: Time.current)
+    # Verify all required fields are completed
+    unless @document_signer.completed_all_required_fields?
+      render json: { error: "Please complete all required fields before submitting." }, status: :unprocessable_entity
+      return
     end
 
-    head :ok
+    # Record the signature
+    @document_signer.record_signature(request)
+
+    # Mark as completed and notify next signer if applicable
+    @document_signer.mark_as_completed!
+
+    # Log this activity
+    @document.log_activity(nil, "signed", request, {
+      signer_id: @document_signer.id,
+      signer_email: @document_signer.email,
+      signer_name: @document_signer.name
+    })
+
+    render json: { success: true, redirect_url: complete_document_path(@document) }
+  rescue ActiveRecord::RecordNotFound
+    render json: { error: "Invalid document or signing link." }, status: :not_found
   end
 
   # GET /documents/:id/complete
@@ -148,6 +156,56 @@ class DocumentsController < ApplicationController
     else
       render json: { errors: @field.errors.full_messages }, status: :unprocessable_entity
     end
+  end
+
+  # POST /documents/:id/send_to_signers
+  def send_to_signers
+    # Check if document is in draft status
+    unless @document.draft?
+      redirect_to document_path(@document), alert: "This document has already been sent."
+      return
+    end
+
+    # Check if document has signers
+    if @document.document_signers.empty?
+      redirect_to document_path(@document), alert: "Please add at least one signer before sending the document."
+      return
+    end
+
+    # Find the first signer (lowest order)
+    first_signer = @document.document_signers.order(:order).first
+
+    # Update document status to pending
+    @document.update(status: :pending)
+
+    # Send email to the first signer
+    DocumentMailer.signing_request(@document, first_signer).deliver_later
+
+    # Log the activity
+    @document.log_activity(current_user, "sent_for_signing", request, {
+      first_signer_id: first_signer.id,
+      first_signer_email: first_signer.email
+    })
+
+    redirect_to document_path(@document), notice: "Document has been sent to #{first_signer.name} (#{first_signer.email}) for signing."
+  end
+
+  # POST /documents/:id/signers/:signer_id/resend
+  def resend_signing_email
+    @document = Document.find(params[:id])
+    @document_signer = @document.document_signers.find(params[:signer_id])
+
+    # Send email to the signer
+    DocumentMailer.signing_request(@document, @document_signer).deliver_later
+
+    # Log the activity
+    @document.log_activity(current_user, "resent_signing_email", request, {
+      signer_id: @document_signer.id,
+      signer_email: @document_signer.email,
+      signer_name: @document_signer.name
+    })
+
+    redirect_to document_path(@document), notice: "Signing email has been resent to #{@document_signer.name} (#{@document_signer.email})."
   end
 
   private

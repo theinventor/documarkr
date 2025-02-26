@@ -1,9 +1,22 @@
 Rails.application.routes.draw do
   devise_for :users
 
+  # Mount letter_opener web interface in development
+  if Rails.env.development?
+    mount LetterOpenerWeb::Engine, at: "/letter_opener"
+  end
+
+  # Public document signing routes (no authentication required)
+  get "sign/:id/:token", to: "public_signing#show", as: "public_sign_document"
+  post "sign/:id", to: "public_signing#sign_complete", as: "public_sign_complete"
+  get "sign/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
+  post "sign/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+
   resources :documents do
     member do
       get :download
+      post :send_to_signers
+      post :resend_signing_email, path: "signers/:signer_id/resend"
     end
     resources :document_signers, only: [ :new, :create, :destroy, :index ]
     resources :form_fields, only: [ :create, :update, :destroy, :index ] do
@@ -12,13 +25,8 @@ Rails.application.routes.draw do
       end
     end
 
-    # Document signing routes
-    get "sign/:token", to: "documents#sign", as: "sign"
-    post "sign", to: "documents#sign_complete"
-    get "complete", to: "documents#complete", as: "complete"
-
     # Form field completion
-    post "form_fields/:field_id/complete", to: "documents#complete_field", as: "complete_field"
+    # post "form_fields/:field_id/complete", to: "documents#complete_field", as: "complete_field"
   end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

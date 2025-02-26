@@ -1,9 +1,9 @@
 <!-- Signature Modal -->
-<div data-signer-field-placement-target="modal" class="hidden fixed inset-0 flex items-center justify-center z-50">
+<div data-field-signing-target="modal" class="hidden fixed inset-0 flex items-center justify-center z-50">
   <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 z-50 overflow-hidden">
     <div class="p-4 border-b border-gray-200 flex justify-between items-center">
       <h3 class="text-xl font-semibold text-gray-800">Complete Field</h3>
-      <button type="button" data-action="signer-field-placement#closeModal" class="text-gray-500 hover:text-gray-700">
+      <button type="button" data-action="field-signing#closeModal" class="text-gray-500 hover:text-gray-700">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -21,7 +21,7 @@
            data-controller="signature-pad"
            data-signature-pad-color-value="#000000"
            data-signature-pad-line-width-value="2"
-           data-action="signature-pad:save->signer-field-placement#signatureComplete">
+           data-action="signature-pad:save->field-signing#signatureComplete">
         
         <div class="relative">
           <canvas data-signature-pad-target="canvas" class="w-full h-40 touch-none"></canvas>
@@ -50,7 +50,7 @@
            data-controller="signature-pad"
            data-signature-pad-color-value="#000000"
            data-signature-pad-line-width-value="2"
-           data-action="signature-pad:save->signer-field-placement#signatureComplete">
+           data-action="signature-pad:save->field-signing#signatureComplete">
         
         <div class="relative">
           <canvas data-signature-pad-target="canvas" class="w-full h-32 touch-none"></canvas>
@@ -75,7 +75,7 @@
         <p class="text-sm text-gray-500">Type the requested information below.</p>
       </div>
       
-      <form data-action="submit->signer-field-placement#textComplete">
+      <form data-action="submit->field-signing#textComplete">
         <div class="mb-4">
           <input type="text" 
                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -99,7 +99,7 @@
         <p class="text-sm text-gray-500">Choose a date from the calendar.</p>
       </div>
       
-      <form data-action="submit->signer-field-placement#dateComplete">
+      <form data-action="submit->field-signing#dateComplete">
         <div class="mb-4">
           <input type="date" 
                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 

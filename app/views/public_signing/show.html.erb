@@ -1,0 +1,111 @@
+<%# Document Signing Page %>
+<div class="min-h-screen flex flex-col">
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900"><%= @document.title %></h1>
+        <p class="text-sm text-gray-500 mt-1">Please review and complete all required fields</p>
+      </div>
+      <div>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+          <%= @document_signer.name %>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-grow flex bg-gray-50">
+    <div class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6"
+      data-controller="field-signing"
+      data-field-signing-document-id-value="<%= @document.id %>"
+      data-field-signing-signer-id-value="<%= @document_signer.id %>"
+      data-field-signing-token-value="<%= @token %>"
+      data-field-signing-complete-redirect-url-value="<%= public_sign_complete_view_path(@document) %>">
+      
+      <div class="flex flex-col bg-white shadow-sm rounded-lg overflow-hidden">
+        <%# PDF Viewer %>
+        <div class="flex-grow flex flex-col"
+          data-controller="pdf-viewer"
+          data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) %>"
+          data-action="pdf-viewer:page-changed->field-signing#handlePageChange">
+          
+          <%# PDF Toolbar - Modified to remove pagination %>
+          <div class="flex items-center justify-between p-2 border-b bg-gray-50">
+            <div class="flex items-center space-x-2">
+              <span class="text-sm">
+                <span data-pdf-viewer-target="pageCount"></span> Pages
+              </span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button id="zoomOutButton" data-action="pdf-viewer#zoomOut" class="p-1 rounded-md hover:bg-gray-200">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" />
+                </svg>
+              </button>
+              <span class="text-sm" data-pdf-viewer-target="zoomLevel">100%</span>
+              <button id="zoomInButton" data-action="pdf-viewer#zoomIn" class="p-1 rounded-md hover:bg-gray-200">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <%# PDF Pages Container - Modified for vertical scrolling %>
+          <div class="flex-grow overflow-auto relative p-4 bg-gray-100" data-field-signing-target="pageContainer">
+            <div data-pdf-viewer-target="container" class="mx-auto relative">
+              <%# PDF pages will be rendered here %>
+              <div data-pdf-viewer-target="loading" class="pdf-loading absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
+                <div class="text-center">
+                  <svg class="animate-spin h-8 w-8 mx-auto text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p class="mt-2 text-sm text-gray-500">Loading document...</p>
+                </div>
+              </div>
+            </div>
+            
+            <%# Form Fields Layer %>
+            <div class="absolute top-0 left-0 w-full h-full pointer-events-none" data-field-signing-target="container">
+              <% @form_fields.each do |field| %>
+                <div 
+                  data-field-signing-target="field"
+                  data-field-type="<%= field.field_type %>"
+                  data-field-id="field-<%= field.id %>"
+                  data-completed="<%= field.completed ? 'true' : 'false' %>"
+                  data-required="true"
+                  data-page="<%= field.page_number %>"
+                  data-x-position="<%= field.x_position %>"
+                  data-y-position="<%= field.y_position %>"
+                  data-width="<%= field.width %>"
+                  data-height="<%= field.height %>"
+                  data-action="click->field-signing#openSignatureModal"
+                  class="form-field <%= field.completed ? 'completed' : '' %>"
+                  >
+                  
+                  <% if field.completed && field.value.present? %>
+                    <% if field.field_type == 'signature' || field.field_type == 'initials' %>
+                      <img src="<%= field.value %>" class="w-full h-full object-contain">
+                    <% else %>
+                      <div class="w-full h-full flex items-center justify-center text-center p-1">
+                        <%= field.value %>
+                      </div>
+                    <% end %>
+                  <% else %>
+                    <div class="text-xs text-gray-500 text-center p-1">
+                      <%= field.field_type.capitalize %>
+                      <span class="text-red-500">*</span>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <%= render 'signing_modal' %>
+</div>

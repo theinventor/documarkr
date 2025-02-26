@@ -81,11 +81,22 @@ class Document < ApplicationRecord
 
   # Generate a signing URL for a specific signer
   def signing_url_for(signer)
-    Rails.application.routes.url_helpers.document_sign_url(
-      self,
+    Rails.application.routes.url_helpers.public_sign_document_url(
+      id: self.id,
       token: signer.token,
-      host: Rails.application.config.action_mailer.default_url_options[:host]
+      host: Rails.application.config.action_mailer.default_url_options[:host],
+      port: Rails.application.config.action_mailer.default_url_options[:port]
     )
+  end
+
+  # Get the next signer in the sequence
+  def next_signer_after(current_signer)
+    return nil if current_signer.nil?
+
+    # Find the next signer with a higher order value
+    document_signers.where("order > ?", current_signer.order)
+                    .order(:order)
+                    .first
   end
 
   # Check if the document is completed by all signers

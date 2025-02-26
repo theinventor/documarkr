@@ -6,18 +6,266 @@ export default class extends Controller {
   static values = {
     documentId: Number,
     signerId: Number,
+    token: String,
     page: { type: Number, default: 1 },
     currentField: { type: String, default: "" },
     completeRedirectUrl: String
   }
   
   connect() {
-    this.initialize()
+    console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
+    console.log("%cFIELD SIGNING CONTROLLER CONNECTED!!!", "color: purple; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
+
+    console.log("Field signing controller connected");
+    
+    // Install event listeners
+    this.handlePageChangeEvent = this.handlePageChangeEvent.bind(this);
+    document.addEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
+    
+    // Explicitly bind updateFieldPositions
+    this.boundUpdateFieldPositions = this.updateFieldPositions.bind(this);
+    
+    // Listen for PDF viewer scale changes and loaded events
+    document.addEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
+    document.addEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
+    
+    // Check if container target exists and log result
+    if (this.hasContainerTarget) {
+      console.log("Container target found:", this.containerTarget);
+    } else {
+      console.warn("Container target is missing! Field positioning will not work properly.");
+    }
+    
+    // Set up CSS for field positioning
+    this.setupFieldPositionStyles();
+    
+    // Initialize field visibility based on the current page
+    this.initialize();
+    
+    // If this is already a signed field (signature/initials with an image)
+    // Mark the field as completed
+    this.fieldTargets.forEach(field => {
+      const img = field.querySelector('img');
+      if (img) {
+        field.dataset.completed = 'true';
+      }
+    });
+    
+    // Check if all signatures are complete
+    this.checkCompletionStatus();
+    
+    // Add a failsafe for field positioning
+    setTimeout(() => {
+      console.log("Running field positioning failsafe");
+      this.updateFieldPositions();
+    }, 2000);
+  }
+  
+  disconnect() {
+    // Clean up event listener when controller is disconnected
+    document.removeEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
+    document.removeEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
+    document.removeEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
+  }
+  
+  // Event handler for the PDF viewer's page change event
+  handlePageChangeEvent(event) {
+    console.log("Page change event received:", event);
+    // In the new layout with all pages displayed, we just need to ensure
+    // fields are positioned correctly
+    this.updateFieldPositions();
   }
   
   initialize() {
-    // Check if all signatures are complete
-    this.checkCompletionStatus()
+    const currentPage = this.pageValue || 1;
+    console.log(`Initializing with current page: ${currentPage}`);
+
+    // In the new layout, all fields should be visible
+    this.fieldTargets.forEach(field => {
+      field.classList.remove('hidden-field');
+    });
+  }
+  
+  // Create a style element with positioning for each field
+  setupFieldPositionStyles() {
+    console.log("Setting up field position styles");
+    
+    this.fieldTargets.forEach((field, index) => {
+      const xPos = field.dataset.xPosition;
+      const yPos = field.dataset.yPosition;
+      const width = field.dataset.width;
+      const height = field.dataset.height;
+      const fieldType = field.dataset.fieldType;
+      const isCompleted = field.dataset.completed === "true";
+      const pageNumber = parseInt(field.dataset.page, 10);
+      
+      // Store the page number for later use
+      field.setAttribute('data-page-number', pageNumber);
+      
+      // Apply initial positioning directly to elements
+      field.style.position = 'absolute';
+      field.style.left = `${xPos}%`;
+      field.style.top = `${yPos}%`;
+      field.style.width = `${width}px`;
+      field.style.height = `${height}px`;
+      field.style.transform = 'translate(-50%, -50%)';
+      
+      // Add a class to identify the page this field belongs to
+      field.classList.add(`page-${pageNumber}-field`);
+      
+      // If the field is not already completed, convert it to an appropriate input
+      if (!isCompleted) {
+        if (fieldType === 'text') {
+          // Replace with an actual text input
+          const label = field.querySelector('.text-xs');
+          if (label) {
+            const required = field.dataset.required === "true";
+            
+            // Clear the field
+            field.innerHTML = '';
+            
+            // Create and add input
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'w-full h-full p-1 text-sm border-none focus:ring-2 focus:ring-blue-500';
+            input.placeholder = required ? 'Text *' : 'Text';
+            input.required = required;
+            input.dataset.action = 'change->field-signing#handleInputChange';
+            
+            field.appendChild(input);
+            field.dataset.action = ''; // Remove the modal open action
+          }
+        } 
+        else if (fieldType === 'date') {
+          // Replace with an actual date input
+          const label = field.querySelector('.text-xs');
+          if (label) {
+            const required = field.dataset.required === "true";
+            
+            // Clear the field
+            field.innerHTML = '';
+            
+            // Create and add input
+            const input = document.createElement('input');
+            input.type = 'date';
+            input.className = 'w-full h-full p-1 text-sm border-none focus:ring-2 focus:ring-blue-500';
+            input.required = required;
+            input.dataset.action = 'change->field-signing#handleInputChange';
+            
+            // Set default value to today's date
+            const today = new Date().toISOString().split('T')[0];
+            input.value = today;
+            
+            field.appendChild(input);
+            field.dataset.action = ''; // Remove the modal open action
+          }
+        }
+        // Keep signature/initials as clickable areas that open the modal
+      }
+    });
+  }
+  
+  // Update field positions based on the current PDF pages in the DOM
+  updateFieldPositions() {
+    console.log("Updating field positions for multi-page layout");
+    
+    // Check if we have a container target
+    if (!this.hasContainerTarget) {
+      console.error("Missing container target! Cannot position fields.");
+      return;
+    }
+    
+    // Find all PDF page containers in the document - specifically inside the pdf-pages-container
+    const pagesContainer = document.querySelector('.pdf-pages-container');
+    if (!pagesContainer) {
+      console.warn("No pages container found - delaying field positioning");
+      setTimeout(() => this.updateFieldPositions(), 500);
+      return;
+    }
+    
+    const pageContainers = pagesContainer.querySelectorAll('.pdf-page-container');
+    
+    if (!pageContainers.length) {
+      console.log("No page containers found yet, will try again later");
+      setTimeout(() => this.updateFieldPositions(), 500);
+      return;
+    }
+    
+    console.log(`Found ${pageContainers.length} page containers`);
+    
+    try {
+      // Get the container rect to calculate relative positions
+      const containerRect = this.containerTarget.getBoundingClientRect();
+      
+      // For each page, find its top offset and position fields accordingly
+      pageContainers.forEach(pageContainer => {
+        const pageNumber = parseInt(pageContainer.dataset.page, 10);
+        const pageCanvas = pageContainer.querySelector('canvas');
+        
+        if (!pageCanvas) {
+          console.log(`No canvas found for page ${pageNumber}`);
+          return;
+        }
+        
+        const pageRect = pageCanvas.getBoundingClientRect();
+        
+        // Calculate page offset relative to container
+        const pageOffsetTop = pageRect.top - containerRect.top;
+        const pageOffsetLeft = pageRect.left - containerRect.left;
+        
+        console.log(`Page ${pageNumber} positioned at: left=${pageOffsetLeft}, top=${pageOffsetTop}, width=${pageRect.width}, height=${pageRect.height}`);
+        
+        // Find all fields for this page
+        const fields = this.fieldTargets.filter(field => 
+          parseInt(field.dataset.page, 10) === pageNumber
+        );
+        
+        console.log(`Found ${fields.length} fields for page ${pageNumber}`);
+        
+        fields.forEach(field => {
+          // Get the position as percentage of the page
+          const xPosPercent = parseFloat(field.dataset.xPosition);
+          const yPosPercent = parseFloat(field.dataset.yPosition);
+          
+          // Calculate absolute position within the page
+          const xPosAbsolute = (xPosPercent / 100) * pageRect.width;
+          const yPosAbsolute = (yPosPercent / 100) * pageRect.height;
+          
+          // Set absolute position relative to the container
+          field.style.position = 'absolute';
+          field.style.left = `${pageOffsetLeft + xPosAbsolute}px`;
+          field.style.top = `${pageOffsetTop + yPosAbsolute}px`;
+          
+          // Set the width and height based on the scaled page
+          const fieldWidth = parseFloat(field.dataset.width);
+          const fieldHeight = parseFloat(field.dataset.height);
+          
+          // Apply the same scale factor that's being used on the page
+          const scale = pageRect.width / pageCanvas.width;
+          field.style.width = `${fieldWidth * scale}px`;
+          field.style.height = `${fieldHeight * scale}px`;
+          
+          // Use transform for centering (offset by 50% of the field's width and height)
+          field.style.transform = 'translate(-50%, -50%)';
+          
+          // Make field visible now that it's correctly positioned
+          field.classList.add('positioned');
+          
+          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
+        });
+      });
+    } catch (error) {
+      console.error("Error positioning fields:", error);
+    }
+  }
+  
+  // Handle the page change event
+  handlePageChange(event) {
+    console.log("Page change event received:", event);
+    // In the new layout with all pages displayed, we just need to ensure
+    // fields are positioned correctly
+    this.updateFieldPositions();
   }
   
   openSignatureModal(event) {
@@ -187,19 +435,33 @@ export default class extends Controller {
     this.checkCompletionStatus()
   }
   
-  saveFieldValue(fieldId, value) {
-    // Parse out the database ID from the field ID
+  async saveFieldValue(fieldId, value) {
     const dbId = fieldId.replace('field-', '')
     
-    fetch(`/documents/${this.documentIdValue}/form_fields/${dbId}/complete`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-      },
-      body: JSON.stringify({ value })
-    })
-    .catch(error => console.error('Error saving field value:', error))
+    try {
+      // Include token in the URL
+      const response = await fetch(`/sign/${this.documentIdValue}/form_fields/${dbId}/complete?token=${this.tokenValue}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ value })
+      })
+      
+      if (!response.ok) {
+        console.error('Error saving field value:', response.statusText)
+        alert('Failed to save your input. Please try again.')
+        return false
+      }
+      
+      const data = await response.json()
+      return data.success
+    } catch (error) {
+      console.error('Error saving field value:', error)
+      alert('Failed to save your input. Please try again.')
+      return false
+    }
   }
   
   checkCompletionStatus() {
@@ -236,27 +498,67 @@ export default class extends Controller {
   
   completeDocument() {
     // Submit all signatures
-    fetch(`/documents/${this.documentIdValue}/sign`, {
+    fetch(`/sign/${this.documentIdValue}?token=${this.tokenValue}`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-      }
+      },
+      body: JSON.stringify({})
     })
     .then(response => {
-      if (response.ok) {
-        // Show success and redirect
-        if (this.hasCompleteRedirectUrlValue) {
-          window.location.href = this.completeRedirectUrlValue
-        } else {
-          window.location.reload()
-        }
-      } else {
-        throw new Error('Failed to complete document signing')
+      if (!response.ok) {
+        return response.json().then(data => {
+          console.error('Error completing document:', data.error);
+          alert('Error completing document: ' + (data.error || 'Unknown error'));
+          throw new Error(data.error || 'Unknown error');
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Document completed successfully:', data);
+      
+      // Check if we have a redirect URL
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+      } else if (this.hasCompleteRedirectUrlValue) {
+        window.location.href = this.completeRedirectUrlValue;
       }
     })
     .catch(error => {
-      console.error('Error completing document:', error)
-      alert('There was an error completing your signature. Please try again.')
-    })
+      console.error('Error completing document:', error);
+    });
+  }
+  
+  // Handle changes to direct inputs (text, date)
+  handleInputChange(event) {
+    const input = event.target;
+    const field = input.closest('[data-field-signing-target="field"]');
+    if (!field) return;
+    
+    const fieldId = field.dataset.fieldId;
+    const fieldType = field.dataset.fieldType;
+    
+    let value = input.value;
+    
+    // Format the date for display if it's a date field
+    if (fieldType === 'date') {
+      const date = new Date(value);
+      value = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    }
+    
+    // Save the value to the server
+    this.saveFieldValue(fieldId, value);
+    
+    // Mark as completed
+    field.dataset.completed = "true";
+    
+    // Check if all fields are completed
+    this.checkCompletionStatus();
   }
 } 
