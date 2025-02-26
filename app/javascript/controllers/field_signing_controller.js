@@ -13,6 +13,10 @@ export default class extends Controller {
   }
   
   connect() {
+    console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
+    console.log("%cFIELD SIGNING CONTROLLER CONNECTED!!!", "color: purple; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
+
     console.log("Field signing controller connected");
     
     // Install event listeners

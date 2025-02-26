@@ -16,18 +16,18 @@
 
   <main class="flex-grow flex bg-gray-50">
     <div class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6"
-      data-controller="field-signing"
-      data-field-signing-document-id-value="<%= @document.id %>"
-      data-field-signing-signer-id-value="<%= @document_signer.id %>"
-      data-field-signing-token-value="<%= @token %>"
-      data-field-signing-complete-redirect-url-value="<%= document_complete_path(@document) %>">
+      data-controller="signer-field-placement"
+      data-signer-field-placement-document-id-value="<%= @document.id %>"
+      data-signer-field-placement-signer-id-value="<%= @document_signer.id %>"
+      data-signer-field-placement-token-value="<%= @token %>"
+      data-signer-field-placement-complete-redirect-url-value="<%= document_complete_path(@document) %>">
       
       <div class="flex flex-col bg-white shadow-sm rounded-lg overflow-hidden">
         <%# PDF Viewer %>
         <div class="flex-grow flex flex-col"
           data-controller="pdf-viewer"
           data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) %>"
-          data-action="pdf-viewer:page-changed->field-signing#handlePageChange">
+          data-action="pdf-viewer:page-changed->signer-field-placement#handlePageChange">
           
           <%# PDF Toolbar %>
           <div class="flex items-center justify-between p-2 border-b bg-gray-50">
@@ -62,7 +62,7 @@
           </div>
 
           <%# PDF Pages Container %>
-          <div class="flex-grow overflow-auto relative p-4 bg-gray-100" data-field-signing-target="pageContainer">
+          <div class="flex-grow overflow-auto relative p-4 bg-gray-100" data-signer-field-placement-target="pageContainer">
             <div data-pdf-viewer-target="container" class="mx-auto relative">
               <%# PDF pages will be rendered here %>
               <div data-pdf-viewer-target="loading" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
@@ -76,17 +76,17 @@
               </div>
               
               <%# Form Fields Layer %>
-              <div class="absolute inset-0 pointer-events-none" data-field-signing-target="container">
+              <div class="absolute inset-0 pointer-events-none" data-signer-field-placement-target="container">
                 <% @form_fields.each do |field| %>
                   <div class="absolute pointer-events-auto" 
                     style="left: <%= field.x_position %>%; top: <%= field.y_position %>%; width: <%= field.width %>px; height: <%= field.height %>px; transform: translate(-50%, -50%);"
-                    data-field-signing-target="field"
+                    data-signer-field-placement-target="field"
                     data-field-type="<%= field.field_type %>"
                     data-field-id="field-<%= field.id %>"
                     data-completed="<%= field.completed ? 'true' : 'false' %>"
                     data-required="<%= field.required ? 'true' : 'false' %>"
                     data-page="<%= field.page_number %>"
-                    data-action="click->field-signing#openSignatureModal"
+                    data-action="click->signer-field-placement#openSignatureModal"
                     class="<%= field.completed ? 'border border-solid bg-gray-50' : 'border border-dashed' %> rounded-md flex items-center justify-center cursor-pointer <%= field.required ? 'border-blue-500' : 'border-gray-400' %> hover:border-blue-600">
                     
                     <% if field.completed && field.value.present? %>

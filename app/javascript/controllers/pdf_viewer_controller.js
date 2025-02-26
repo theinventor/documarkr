@@ -10,6 +10,11 @@ export default class extends Controller {
   }
 
   connect() {
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    console.log("%cPDF VIEWER CONTROLLER CONNECTED!!!", "color: red; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    
+    console.log("PDF Viewer controller connected");
     console.log("PDF Viewer connected, URL:", this.urlValue);
     this.pages = []
     this.currentPage = this.pageValue

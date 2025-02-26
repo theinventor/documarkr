@@ -1,8 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
 import { getFieldDimensions } from "utils/field_utils"
 
-// Connects to data-controller="field-placement"
-export default class extends Controller {
+// Connects to data-controller="editor-field-placement"
+export default class EditorFieldPlacementController extends Controller {
   static targets = ["container", "toolbarButton", "fieldsList", "signerSelect"]
   static values = { 
     documentId: String,
@@ -11,6 +11,10 @@ export default class extends Controller {
   }
 
   connect() {
+    console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
+    console.log("%cEDITOR FIELD PLACEMENT CONTROLLER CONNECTED!!!", "color: green; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
+    
     console.log("Field Placement Controller connected")
     this.selectedFieldType = null
     this.fields = []

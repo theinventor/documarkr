@@ -147,10 +147,10 @@
     </div>
 
     <div 
-      data-controller="pdf-viewer field-placement" 
+      data-controller="pdf-viewer editor-field-placement" 
       data-pdf-viewer-url-value="<%= rails_blob_url(@document.file) %>"
-      data-field-placement-document-id-value="<%= @document.id %>"
-      data-field-placement-mode-value="edit"
+      data-editor-field-placement-document-id-value="<%= @document.id %>"
+      data-editor-field-placement-mode-value="edit"
       class="relative">
       
       <div class="pdf-loading" data-pdf-viewer-target="loading">
@@ -187,8 +187,8 @@
             </div>
             
             <select 
-              data-field-placement-target="signerSelect" 
-              data-action="change->field-placement#signerSelectChanged"
+              data-editor-field-placement-target="signerSelect" 
+              data-action="change->editor-field-placement#signerSelectChanged"
               class="block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md">
               <option value="">Select a signer</option>
               <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
@@ -207,9 +207,9 @@
           <div class="flex flex-col space-y-2 mb-6">
             <button 
               type="button" 
-              data-field-placement-target="toolbarButton" 
+              data-editor-field-placement-target="toolbarButton" 
               data-field-type="signature" 
-              data-action="field-placement#selectFieldType"
+              data-action="editor-field-placement#selectFieldType"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               disabled>
               <svg class="h-4 w-4 mr-2" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -220,9 +220,9 @@
             
             <button 
               type="button" 
-              data-field-placement-target="toolbarButton" 
+              data-editor-field-placement-target="toolbarButton" 
               data-field-type="initials" 
-              data-action="field-placement#selectFieldType"
+              data-action="editor-field-placement#selectFieldType"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               disabled>
               <svg class="h-4 w-4 mr-2" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -233,9 +233,9 @@
             
             <button 
               type="button" 
-              data-field-placement-target="toolbarButton" 
+              data-editor-field-placement-target="toolbarButton" 
               data-field-type="text" 
-              data-action="field-placement#selectFieldType"
+              data-action="editor-field-placement#selectFieldType"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               disabled>
               <svg class="h-4 w-4 mr-2" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -246,9 +246,9 @@
             
             <button 
               type="button" 
-              data-field-placement-target="toolbarButton" 
+              data-editor-field-placement-target="toolbarButton" 
               data-field-type="date" 
-              data-action="field-placement#selectFieldType"
+              data-action="editor-field-placement#selectFieldType"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               disabled>
               <svg class="h-4 w-4 mr-2" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -259,8 +259,8 @@
             
             <button 
               type="button" 
-              data-field-placement-target="toolbarButton"
-              data-action="field-placement#cancelFieldSelection"
+              data-editor-field-placement-target="toolbarButton"
+              data-action="editor-field-placement#cancelFieldSelection"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -288,7 +288,7 @@
           <!-- Fields List Panel -->
           <div class="bg-gray-50 p-3 rounded-md">
             <h3 class="text-sm font-medium text-gray-700 mb-2">Fields</h3>
-            <ul data-field-placement-target="fieldsList" class="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
+            <ul data-editor-field-placement-target="fieldsList" class="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
               <!-- Fields will be inserted here dynamically -->
             </ul>
           </div>
@@ -296,7 +296,7 @@
         
         <!-- Right side with PDF viewer -->
         <div class="flex-1">
-          <div data-pdf-viewer-target="container" data-field-placement-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[600px]">
+          <div data-pdf-viewer-target="container" data-editor-field-placement-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[600px]">
             <!-- PDF will be rendered here -->
           </div>
           
