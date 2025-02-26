@@ -15,14 +15,54 @@
   </header>
 
   <main class="flex-grow flex bg-gray-50">
-    <div class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6"
+    <div class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex"
       data-controller="field-signing"
       data-field-signing-document-id-value="<%= @document.id %>"
       data-field-signing-signer-id-value="<%= @document_signer.id %>"
       data-field-signing-token-value="<%= @token %>"
       data-field-signing-complete-redirect-url-value="<%= public_sign_complete_view_path(@document) %>">
       
-      <div class="flex flex-col bg-white shadow-sm rounded-lg overflow-hidden">
+      <!-- Field status sidebar -->
+      <div class="w-full md:w-64 lg:w-80 bg-white border-r border-gray-200 flex flex-col">
+        <div class="p-4 border-b border-gray-200">
+          <h2 class="text-lg font-bold text-gray-800">Document Fields</h2>
+          <div class="mt-2">
+            <div class="text-sm text-gray-600">
+              Progress: <span data-field-signing-target="completedCount">0</span>/<span data-field-signing-target="totalCount">0</span> completed
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+              <div data-field-signing-target="progressBar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="overflow-y-auto flex-grow p-2" data-field-signing-target="fieldsList">
+          <% @form_fields.each_with_index do |field, index| %>
+            <div class="field-status-item p-2 border-b border-gray-100 hover:bg-gray-50 cursor-pointer flex items-center"
+                 data-field-id="field-<%= field.id %>"
+                 data-field-status="pending"
+                 data-action="click->field-signing#scrollToField">
+              <div class="field-status w-4 h-4 rounded-full bg-gray-300 mr-2"></div>
+              <div class="flex-grow">
+                <div class="text-sm font-medium"><%= field.field_type.humanize %> Field</div>
+                <div class="text-xs text-gray-500">Page <%= field.page_number %></div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200">
+          <button id="document-submit-button" 
+                  class="w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed"
+                  form="sign-form" 
+                  type="submit"
+                  disabled>
+            Sign Document
+          </button>
+        </div>
+      </div>
+      
+      <div class="flex-1 flex flex-col bg-white shadow-sm rounded-lg overflow-hidden">
         <%# PDF Viewer %>
         <div class="flex-grow flex flex-col"
           data-controller="pdf-viewer"
@@ -83,17 +123,49 @@
                   data-height="<%= field.height %>"
                   data-action="<%= field.field_type == 'text' || field.field_type == 'date' ? 'click->field-signing#handleFieldClick' : 'click->field-signing#openSignatureModal' %>"
                   class="form-field <%= field.completed ? 'completed' : '' %> cursor-pointer absolute pointer-events-auto hover:bg-blue-50 rounded transition-colors"
-                  style="border: <%= field.completed ? '1px solid #4CAF50' : '1px dashed #2563EB' %>; 
-                         background-color: <%= field.completed ? 'rgba(220, 252, 231, 0.5)' : 'rgba(239, 246, 255, 0.5)' %>;">
+                  style="border: <%= field.completed ? '2px solid #4CAF50' : '2px dashed #2563EB' %>; 
+                         background-color: <%= field.completed ? 'rgba(220, 252, 231, 0.7)' : 'rgba(239, 246, 255, 0.7)' %>;">
                   
                   <% if field.completed && field.value.present? %>
                     <% if field.field_type == 'signature' || field.field_type == 'initials' %>
-                      <img src="<%= field.value %>" class="w-full h-full object-contain">
+                      <img src="<%= field.value %>" class="w-full h-full object-contain p-1">
                     <% else %>
-                      <div class="w-full h-full flex items-center justify-center text-center p-1">
+                      <div class="w-full h-full flex items-center justify-center text-center p-2 text-base">
                         <%= field.value %>
                       </div>
                     <% end %>
+                  <% elsif field.field_type == 'text' %>
+                    <div class="w-full h-full flex flex-col items-center justify-center p-1">
+                      <div class="text-xs text-gray-500 text-center mb-1">
+                        Text Field <span class="text-red-500">*</span>
+                      </div>
+                      <input type="text" 
+                            class="w-full px-2 py-1 text-base border-none focus:ring-2 focus:ring-blue-500 bg-transparent"
+                            data-action="input->field-signing#handleInputChange blur->field-signing#handleInputBlur"
+                            data-field-id="<%= field.id %>"
+                            placeholder="Click to type">
+                      <button type="button" 
+                              class="mt-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                              data-action="click->field-signing#saveTextField">
+                        Save
+                      </button>
+                    </div>
+                  <% elsif field.field_type == 'date' %>
+                    <div class="w-full h-full flex flex-col items-center justify-center p-1">
+                      <div class="text-xs text-gray-500 text-center mb-1">
+                        Date Field <span class="text-red-500">*</span>
+                      </div>
+                      <input type="date" 
+                            class="w-full px-2 py-1 text-base border-none focus:ring-2 focus:ring-blue-500 bg-transparent"
+                            data-action="input->field-signing#handleInputChange blur->field-signing#handleInputBlur"
+                            data-field-id="<%= field.id %>"
+                            value="<%= Date.today.iso8601 %>">
+                      <button type="button" 
+                              class="mt-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                              data-action="click->field-signing#saveDateField">
+                        Save
+                      </button>
+                    </div>
                   <% else %>
                     <div class="text-xs text-gray-500 text-center p-1">
                       <%= field.field_type.capitalize %>
@@ -115,19 +187,25 @@
             <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
             </svg>
-            <span><strong>Text Fields:</strong> Click on any text field to type directly.</span>
+            <span><strong>Text Fields:</strong> Click on any text field to type directly, then click Save.</span>
           </li>
           <li class="flex items-start">
             <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
             </svg>
-            <span><strong>Date Fields:</strong> Click on any date field to open a date picker. Today's date is pre-filled.</span>
+            <span><strong>Date Fields:</strong> Click on any date field to open a date picker, then click Save.</span>
           </li>
           <li class="flex items-start">
             <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
             </svg>
             <span><strong>Signature/Initials:</strong> Click to draw your signature or initials using our signature pad.</span>
+          </li>
+          <li class="flex items-start">
+            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span><strong>Field List:</strong> Use the sidebar on the left to track your progress.</span>
           </li>
           <li class="flex items-start">
             <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -226,3 +304,167 @@
     });
   </script>
 </div>
+
+<!-- Hidden form for submission -->
+<%= form_with url: public_sign_path(id: @document.id), method: :post, id: "sign-form", class: "hidden" do |f| %>
+  <%= f.hidden_field :token, value: @token %>
+<% end %>
+
+<!-- Signature modal -->
+<%= render "signing_modal" %>
+
+<!-- Custom styles for fields -->
+<style>
+  .highlight-field {
+    animation: pulse 1s ease-in-out;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+    z-index: 20;
+  }
+  
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  }
+  
+  /* Field styles */
+  [data-field-signing-target="field"] {
+    min-width: 100px !important;
+    min-height: 40px !important;
+    transition: all 0.2s ease;
+    transform-origin: center;
+  }
+  
+  [data-field-signing-target="field"]:hover {
+    border-color: #2563EB !important;
+    background-color: rgba(219, 234, 254, 0.6) !important;
+    z-index: 10;
+  }
+  
+  [data-field-signing-target="field"].completed {
+    border: 2px solid #4CAF50 !important;
+    background-color: rgba(220, 252, 231, 0.7) !important;
+    border-style: solid !important;
+  }
+  
+  /* Sidebar styles */
+  .field-status-item[data-field-status="completed"] {
+    background-color: rgba(240, 253, 244, 0.5);
+  }
+  
+  /* Text input container */
+  .text-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    padding: 4px;
+  }
+  
+  .text-input-container input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    margin-bottom: 5px;
+  }
+  
+  .text-input-container button {
+    background-color: #3B82F6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+    width: 100%;
+  }
+  
+  .text-input-container button:hover:not(:disabled) {
+    background-color: #2563EB;
+  }
+  
+  .text-input-container button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Animation for submit button */
+  @keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  }
+  
+  .animate-pulse {
+    animation: pulse-green 2s infinite;
+  }
+  
+  /* Add debug information */
+  .debug-info {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 9999;
+    max-width: 300px;
+    max-height: 200px;
+    overflow: auto;
+  }
+</style>
+
+<!-- JavaScript to enhance functionality -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Document loaded, enhancing field interactions');
+  
+  // Add debug info
+  const debugInfo = document.createElement('div');
+  debugInfo.className = 'debug-info';
+  debugInfo.innerHTML = '<h4>Debug Info:</h4>';
+  debugInfo.innerHTML += `<p>Document ID: <%= @document.id %></p>`;
+  debugInfo.innerHTML += `<p>Signer ID: <%= @signer.id %></p>`;
+  debugInfo.innerHTML += `<p>Field Count: <%= @form_fields.count %></p>`;
+  document.body.appendChild(debugInfo);
+  
+  // Update debug info with field completion status
+  function updateDebugInfo() {
+    const fields = document.querySelectorAll('[data-field-signing-target="field"]');
+    const completed = Array.from(fields).filter(f => f.dataset.completed === 'true').length;
+    
+    const debugStatus = document.createElement('p');
+    debugStatus.innerHTML = `Fields completed: ${completed}/${fields.length}`;
+    
+    const oldStatus = debugInfo.querySelector('p:last-child');
+    if (oldStatus && oldStatus.innerHTML.includes('Fields completed:')) {
+      debugInfo.replaceChild(debugStatus, oldStatus);
+    } else {
+      debugInfo.appendChild(debugStatus);
+    }
+  }
+  
+  // Initial update
+  updateDebugInfo();
+  
+  // Listen for changes
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'data-completed') {
+        updateDebugInfo();
+      }
+    });
+  });
+  
+  document.querySelectorAll('[data-field-signing-target="field"]').forEach(field => {
+    observer.observe(field, { attributes: true });
+  });
+});
+</script>

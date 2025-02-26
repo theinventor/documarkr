@@ -2,7 +2,8 @@ import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="field-signing"
 export default class extends Controller {
-  static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas", "saveButton"]
+  static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas", 
+                    "fieldsList", "progressBar", "completedCount", "totalCount"]
   static values = {
     documentId: Number,
     signerId: Number,
@@ -52,8 +53,8 @@ export default class extends Controller {
       }
     });
     
-    // Check if all signatures are complete
-    this.checkCompletionStatus();
+    // Check if all signatures are complete and update progress
+    this.updateFieldStatuses();
     
     // Add a failsafe for field positioning
     setTimeout(() => {
@@ -69,6 +70,9 @@ export default class extends Controller {
     
     // Make sure every field has the right click action
     this.setupFieldClickHandlers();
+
+    // Initialize progress bar and field list
+    this.updateProgressBar();
 
     // Check if modal target exists and log result
     if (this.hasModalTarget) {
@@ -177,63 +181,76 @@ export default class extends Controller {
   }
   
   setupTextField(field) {
-    // Replace with an actual text input that activates on click
+    console.log("Setting up text field:", field.dataset.fieldId);
+    
+    // Remove existing content
     field.innerHTML = '';
     
-    // Create and add input
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'text-input-container';
+    
+    // Create input
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'w-full h-full p-2 text-base border-none focus:ring-2 focus:ring-blue-500 bg-transparent';
-    input.placeholder = 'Click to type';
-    input.required = true;
-    input.style.fontSize = '16px'; // Ensure readable font size
-    input.dataset.fieldId = field.dataset.fieldId.replace('field-', '');
+    input.className = 'text-input';
+    input.placeholder = field.dataset.fieldLabel || 'Enter text';
+    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
     
-    // Update field when input changes
-    input.addEventListener('change', (e) => {
-      this.updateField(input.dataset.fieldId, e.target.value);
-    });
+    // Create save button
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'save-button opacity-50 cursor-not-allowed';
+    saveButton.disabled = true;
+    saveButton.setAttribute('data-action', 'click->field-signing#saveTextField');
     
-    // Stop propagation to prevent modal from opening
-    input.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    // Add to container
+    container.appendChild(input);
+    container.appendChild(saveButton);
     
-    field.appendChild(input);
+    // Add to field
+    field.appendChild(container);
     
-    // Modify the action to prevent modal opening
-    field.dataset.action = 'click->field-signing#handleFieldClick';
+    // Focus the input
+    setTimeout(() => {
+      input.focus();
+    }, 100);
   }
   
   setupDateField(field) {
+    console.log("Setting up date field:", field.dataset.fieldId);
+    
+    // Remove existing content
     field.innerHTML = '';
     
-    // Create and add date input
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'text-input-container';
+    
+    // Create input
     const input = document.createElement('input');
     input.type = 'date';
-    input.className = 'w-full h-full p-2 text-base border-none focus:ring-2 focus:ring-blue-500 bg-transparent';
-    input.required = true;
-    input.style.fontSize = '16px'; // Ensure readable font size
-    input.dataset.fieldId = field.dataset.fieldId.replace('field-', '');
+    input.className = 'date-input';
+    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
     
-    // Set today's date as default
-    const today = new Date().toISOString().split('T')[0];
-    input.value = today;
+    // Create save button
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'save-button opacity-50 cursor-not-allowed';
+    saveButton.disabled = true;
+    saveButton.setAttribute('data-action', 'click->field-signing#saveDateField');
     
-    // Update field when date changes
-    input.addEventListener('change', (e) => {
-      this.updateField(input.dataset.fieldId, e.target.value);
-    });
+    // Add to container
+    container.appendChild(input);
+    container.appendChild(saveButton);
     
-    // Stop propagation to prevent modal from opening
-    input.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    // Add to field
+    field.appendChild(container);
     
-    field.appendChild(input);
-    
-    // Modify the action to prevent modal opening
-    field.dataset.action = 'click->field-signing#handleFieldClick';
+    // Focus the input
+    setTimeout(() => {
+      input.focus();
+    }, 100);
   }
   
   // Handle direct field click
@@ -437,7 +454,7 @@ export default class extends Controller {
   
   updateField(fieldId, value) {
     // Find the field element
-    const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId)
+    const field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${fieldId}`)
     if (!field) return
     
     // Update the server
@@ -473,12 +490,12 @@ export default class extends Controller {
     // Mark as completed
     field.dataset.completed = "true";
     field.classList.remove('border-dashed');
-    field.classList.add('border-solid');
+    field.classList.add('border-solid', 'completed');
     field.style.border = '2px solid #4CAF50';
     field.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
     
     // Check if all fields are completed
-    this.checkCompletionStatus();
+    this.updateFieldStatuses();
   }
   
   async saveFieldValue(fieldId, value) {
@@ -522,24 +539,26 @@ export default class extends Controller {
   }
   
   showCompletionMessage() {
-    // Create or reveal completion message
-    const completionDiv = document.createElement('div')
-    completionDiv.className = 'fixed inset-x-0 bottom-0 bg-green-50 border-t border-green-200 p-4 flex justify-between items-center z-30'
-    completionDiv.innerHTML = `
-      <div class="flex items-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        <span class="text-green-800 font-medium">All required fields completed!</span>
-      </div>
-      <button type="button" class="px-4 py-2 bg-green-600 text-white font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" data-action="field-signing#completeDocument">
-        Complete Signing
-      </button>
-    `
+    const completionMessage = document.getElementById('completion-message');
+    const submitButton = document.getElementById('document-submit-button');
     
-    // Add to page
-    document.body.appendChild(completionDiv)
-    this.completionBar = completionDiv
+    if (completionMessage) {
+      completionMessage.classList.remove('hidden');
+    }
+    
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      submitButton.classList.add('hover:bg-green-700');
+      
+      // Add a visual highlight to the button
+      submitButton.classList.add('animate-pulse');
+      setTimeout(() => {
+        submitButton.classList.remove('animate-pulse');
+      }, 2000);
+    }
+    
+    console.log("Document ready for submission - all fields completed!");
   }
   
   completeDocument() {
@@ -610,24 +629,26 @@ export default class extends Controller {
   
   // Add submit button to the page
   addSubmitButton() {
-    // Check if button already exists
-    if (document.getElementById('document-submit-button')) {
-      return;
+    const existingButton = document.getElementById('document-submit-button');
+    if (existingButton) return;
+    
+    // Create a submit button in case the template doesn't have one
+    const submitButton = document.createElement('button');
+    submitButton.id = 'document-submit-button';
+    submitButton.textContent = 'Sign Document';
+    submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
+    submitButton.disabled = true;
+    submitButton.setAttribute('form', 'sign-form');
+    submitButton.setAttribute('type', 'submit');
+    
+    // Find a place to add the button
+    const sidebar = document.querySelector('[data-field-signing-target="fieldsList"]');
+    if (sidebar && sidebar.parentElement) {
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'p-4 border-t border-gray-200';
+      buttonContainer.appendChild(submitButton);
+      sidebar.parentElement.appendChild(buttonContainer);
     }
-    
-    // Create button
-    const buttonHTML = `
-      <div class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
-        <button id="document-submit-button" 
-                class="px-6 py-3 bg-green-600 text-white font-medium rounded-lg shadow-lg opacity-50 cursor-not-allowed"
-                disabled
-                data-action="click->field-signing#completeDocument">
-          Submit Document
-        </button>
-      </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', buttonHTML);
   }
 
   // New method to ensure all fields have click handlers
@@ -750,6 +771,173 @@ export default class extends Controller {
       });
     } catch (error) {
       console.error("Error positioning fields:", error);
+    }
+  }
+
+  // For direct saving of text fields
+  saveTextField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-field-signing-target="field"]');
+    const input = field.querySelector('input[type="text"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value.trim();
+    
+    if (value) {
+      this.updateField(fieldId, value);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please enter a value');
+    }
+  }
+  
+  // For direct saving of date fields
+  saveDateField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-field-signing-target="field"]');
+    const input = field.querySelector('input[type="date"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value;
+    
+    if (value) {
+      // Format the date for display
+      const date = new Date(value);
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      this.updateField(fieldId, formattedDate);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please select a date');
+    }
+  }
+  
+  // Handle input changes (not submitting yet)
+  handleInputChange(event) {
+    // Enable save button when typing starts
+    const field = event.currentTarget.closest('[data-field-signing-target="field"]');
+    const saveButton = field.querySelector('button');
+    if (saveButton) {
+      saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      saveButton.disabled = false;
+    }
+  }
+  
+  // Handle input blur (focus lost)
+  handleInputBlur(event) {
+    const input = event.currentTarget;
+    const field = input.closest('[data-field-signing-target="field"]');
+    if (!field) return;
+    
+    // Don't auto-save as we want explicit save button clicks
+  }
+  
+  // Update the status of all fields and check completion
+  updateFieldStatuses() {
+    // Check if all required fields are completed
+    const allRequiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+    const completedFields = allRequiredFields.filter(field => field.dataset.completed === "true");
+    const allCompleted = allRequiredFields.length > 0 && completedFields.length === allRequiredFields.length;
+    
+    console.log(`Field completion: ${completedFields.length}/${allRequiredFields.length} fields completed`);
+    
+    // Update field statuses in the sidebar
+    if (this.hasFieldsListTarget) {
+      const statusItems = this.fieldsListTarget.querySelectorAll('.field-status-item');
+      statusItems.forEach(item => {
+        const fieldId = item.dataset.fieldId;
+        const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
+        
+        if (field && field.dataset.completed === "true") {
+          item.dataset.fieldStatus = "completed";
+          item.querySelector('.field-status').classList.remove('bg-gray-300');
+          item.querySelector('.field-status').classList.add('bg-green-500');
+        }
+      });
+    }
+    
+    // Update progress bar
+    this.updateProgressBar(completedFields.length, allRequiredFields.length);
+    
+    // Enable/disable submit button
+    const submitButton = document.getElementById('document-submit-button');
+    if (submitButton) {
+      if (allCompleted) {
+        submitButton.disabled = false;
+        submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        submitButton.classList.add('hover:bg-green-700');
+      } else {
+        submitButton.disabled = true;
+        submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+        submitButton.classList.remove('hover:bg-green-700');
+      }
+    }
+    
+    // If all completed, show completion UI
+    if (allCompleted) {
+      this.showCompletionMessage();
+    }
+  }
+  
+  // Update progress bar in the sidebar
+  updateProgressBar(completed = null, total = null) {
+    if (!this.hasProgressBarTarget || !this.hasCompletedCountTarget || !this.hasTotalCountTarget) return;
+    
+    if (completed === null || total === null) {
+      const allRequiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+      const completedFields = allRequiredFields.filter(field => field.dataset.completed === "true");
+      
+      completed = completedFields.length;
+      total = allRequiredFields.length;
+    }
+    
+    // Update count text
+    this.completedCountTarget.textContent = completed;
+    this.totalCountTarget.textContent = total;
+    
+    // Update progress bar width
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    this.progressBarTarget.style.width = `${percentage}%`;
+    
+    // Change color based on progress
+    if (percentage === 100) {
+      this.progressBarTarget.classList.remove('bg-blue-500');
+      this.progressBarTarget.classList.add('bg-green-500');
+    } else {
+      this.progressBarTarget.classList.add('bg-blue-500');
+      this.progressBarTarget.classList.remove('bg-green-500');
+    }
+  }
+  
+  // Scroll to a field when clicked in the sidebar
+  scrollToField(event) {
+    const item = event.currentTarget;
+    const fieldId = item.dataset.fieldId;
+    const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
+    
+    if (field) {
+      // Highlight the field briefly
+      field.classList.add('highlight-field');
+      setTimeout(() => {
+        field.classList.remove('highlight-field');
+      }, 2000);
+      
+      // Scroll the field into view
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 } 
