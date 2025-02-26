@@ -46,6 +46,9 @@ export default class extends Controller {
 
     // Listen for PDF scale changes
     this.listenForPdfScaleChanges()
+    
+    // Listen for PDF page changes
+    this.listenForPdfPageChanges()
   }
   
   // New method to check if targets are properly connected
@@ -525,6 +528,7 @@ export default class extends Controller {
     const listItem = document.createElement("li")
     listItem.classList.add("py-2", "px-3", "border-b", "border-gray-200", "flex", "justify-between", "items-center")
     listItem.dataset.fieldId = fieldId
+    listItem.dataset.page = fieldData.page_number // Add page attribute for filtering
     
     // Create text content with field type and page number
     const textContent = document.createElement("div")
@@ -556,11 +560,11 @@ export default class extends Controller {
       </svg>
     `
     
-    // Add the elements to the list item
+    // Append to list item
     listItem.appendChild(textContent)
     listItem.appendChild(deleteButton)
     
-    // Add the list item to the fields list
+    // Add to list
     this.fieldsListTarget.appendChild(listItem)
   }
 
@@ -598,48 +602,66 @@ export default class extends Controller {
   loadFieldsForCurrentPage() {
     console.log(`Loading fields for page ${this.currentPage}`);
     
-    // Clear previous fields
-    this.fields = this.fields.filter(field => {
-      // Keep fields on other pages in the array
-      if (field.page_number !== this.currentPage) {
-        return true;
+    // First, hide/show fields based on the current page
+    this.fields.forEach(field => {
+      if (field.element) {
+        if (parseInt(field.pageNumber) === parseInt(this.currentPage)) {
+          // Show fields for the current page
+          field.element.style.display = 'block';
+        } else {
+          // Hide fields for other pages
+          field.element.style.display = 'none';
+        }
       }
-      
-      // Remove fields on this page from the DOM
-      if (field.element && field.element.parentNode) {
-        field.element.parentNode.removeChild(field.element);
-      }
-      
-      return false;
     });
     
-    // Clear fields list UI
+    // Update the field list UI visibility
     if (this.hasFieldsListTarget) {
-      this.fieldsListTarget.innerHTML = "";
+      const allListItems = this.fieldsListTarget.querySelectorAll('li[data-field-id]');
+      allListItems.forEach(item => {
+        const page = parseInt(item.dataset.page);
+        if (page === parseInt(this.currentPage)) {
+          item.style.display = 'flex'; // List items use flex layout
+        } else {
+          item.style.display = 'none';
+        }
+      });
     }
     
-    // Fetch fields for this page from the server
-    fetch(`/documents/${this.documentIdValue}/form_fields?page_number=${this.currentPage}`)
-      .then(response => response.json())
-      .then(data => {
-        console.log("Fields loaded:", data);
-        
-        // Add each field to the PDF
-        if (Array.isArray(data)) {
-          data.forEach(fieldData => {
-            this.addFieldFromServer(fieldData);
-          });
+    // Check if we've already loaded fields for this page
+    const hasFieldsForCurrentPage = this.fields.some(field => 
+      parseInt(field.pageNumber) === parseInt(this.currentPage)
+    );
+    
+    // Only fetch from server if we haven't loaded fields for this page yet
+    if (!hasFieldsForCurrentPage) {
+      console.log(`Fetching fields for page ${this.currentPage} from server`);
+      
+      // Fetch fields for this page from the server
+      fetch(`/documents/${this.documentIdValue}/form_fields?page_number=${this.currentPage}`)
+        .then(response => response.json())
+        .then(data => {
+          console.log(`Loaded ${data.length} fields for page ${this.currentPage}:`, data);
           
-          // If we have a non-default scale, apply it to all fields that were just added
-          if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
-            console.log(`Applying current scale ${this.lastKnownPdfScale} to newly loaded fields`);
-            this.updateFieldsForZoomChange(this.lastKnownPdfScale);
+          // Add each field to the PDF
+          if (Array.isArray(data)) {
+            data.forEach(fieldData => {
+              this.addFieldFromServer(fieldData);
+            });
+            
+            // If we have a non-default scale, apply it to all fields that were just added
+            if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
+              console.log(`Applying current scale ${this.lastKnownPdfScale} to newly loaded fields`);
+              this.updateFieldsForZoomChange(this.lastKnownPdfScale);
+            }
           }
-        }
-      })
-      .catch(error => {
-        console.error("Error loading fields:", error);
-      });
+        })
+        .catch(error => {
+          console.error("Error loading fields:", error);
+        });
+    } else {
+      console.log(`Using existing fields for page ${this.currentPage}`);
+    }
   }
 
   addFieldFromServer(fieldData) {
@@ -649,6 +671,7 @@ export default class extends Controller {
     const fieldElement = document.createElement('div');
     fieldElement.className = `signature-field field-${fieldData.field_type}`;
     fieldElement.dataset.fieldId = fieldData.id;
+    fieldElement.dataset.page = fieldData.page_number; // Add page attribute for filtering
     
     // Calculate position in percentages
     const xPercent = fieldData.x_position;
@@ -661,6 +684,13 @@ export default class extends Controller {
     fieldElement.style.top = `${yPercent}%`;
     fieldElement.style.width = `${widthPercent}%`;
     fieldElement.style.height = `${heightPercent}%`;
+    
+    // Set visibility based on current page
+    if (fieldData.page_number === this.currentPage) {
+      fieldElement.style.display = 'block';
+    } else {
+      fieldElement.style.display = 'none';
+    }
     
     // Apply scale transform if we have a non-default scale
     if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
@@ -1090,6 +1120,23 @@ export default class extends Controller {
             height: parseFloat(field.element.style.height)
           };
         }
+      }
+    });
+  }
+
+  // Add method to listen for PDF page changes
+  listenForPdfPageChanges() {
+    // Listen for page change events from the PDF viewer
+    document.addEventListener('pdf-viewer:pageChanged', (event) => {
+      console.log('PDF page change detected:', event.detail);
+      const newPage = event.detail.page;
+      
+      if (newPage !== this.currentPage) {
+        console.log(`Changing page: ${this.currentPage} -> ${newPage}`);
+        this.currentPage = newPage;
+        
+        // Load fields for the new page
+        this.loadFieldsForCurrentPage();
       }
     });
   }

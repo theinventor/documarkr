@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="pdf-viewer"
 export default class extends Controller {
-  static targets = ["container", "loading", "pageNum", "pageCount", "zoomLevel"]
+  static targets = ["container", "loading", "pageNum", "pageCount", "zoomLevel", "prevButton", "nextButton"]
   static values = {
     url: String,
     page: { type: Number, default: 1 },
@@ -352,6 +352,9 @@ export default class extends Controller {
         this.updateZoomLevelDisplay()
       }
       
+      // Initialize navigation button states
+      this.updateNavigationButtons();
+      
       console.log("Document loading complete");
     } catch (error) {
       console.error('Error loading PDF:', error)
@@ -473,8 +476,18 @@ export default class extends Controller {
       // Mark page as rendered
       this.pages[pageNum].rendered = true
       
-      // Trigger page changed event
+      // Update navigation button states
+      this.updateNavigationButtons();
+      
+      // Trigger page changed event (Stimulus)
       this.dispatch("pageChanged", { detail: { page: pageNum } })
+      
+      // Also dispatch a custom DOM event for non-Stimulus controllers
+      const customEvent = new CustomEvent('pdf-viewer:pageChanged', {
+        bubbles: true,
+        detail: { page: pageNum }
+      });
+      document.dispatchEvent(customEvent);
     } catch (error) {
       console.error('Error rendering page:', error)
     }
@@ -506,6 +519,9 @@ export default class extends Controller {
       // Return false to ensure the browser doesn't follow the href
       return false;
     }
+    
+    // Always return false to prevent default behavior
+    return false;
   }
 
   prevPage(event) {
@@ -515,10 +531,13 @@ export default class extends Controller {
       event.stopPropagation();
     }
     
+    console.log(`prevPage called, current page: ${this.currentPage}, total pages: ${this.pdfDoc ? this.pdfDoc.numPages : 'unknown'}`);
+    
     // Save current scroll position
     const scrollPos = window.scrollY;
     
     if (this.currentPage > 1) {
+      console.log(`Navigating to previous page: ${this.currentPage - 1}`);
       this.currentPage--
       this.pageValue = this.currentPage
       this.renderPage(this.currentPage)
@@ -533,7 +552,12 @@ export default class extends Controller {
       
       // Return false to ensure the browser doesn't follow the href
       return false;
+    } else {
+      console.log("Already at first page, cannot go to previous page");
     }
+    
+    // Always return false to prevent default behavior
+    return false;
   }
   
   updateZoomLevelDisplay() {
@@ -632,5 +656,50 @@ export default class extends Controller {
         console.error("Could not find loading element by any method");
       }
     }
+  }
+
+  // Update navigation button states based on current page
+  updateNavigationButtons() {
+    console.log("Updating navigation button states");
+    // Enable/disable prev button
+    if (this.hasPrevButtonTarget) {
+      this.prevButtonTarget.disabled = this.currentPage <= 1;
+      console.log(`Prev button disabled: ${this.prevButtonTarget.disabled}`);
+    }
+    
+    // Enable/disable next button
+    if (this.hasNextButtonTarget) {
+      this.nextButtonTarget.disabled = this.currentPage >= this.pdfDoc.numPages;
+      console.log(`Next button disabled: ${this.nextButtonTarget.disabled}`);
+    }
+  }
+
+  // Helper method to manually check navigation button states
+  checkNavigationButtons() {
+    console.log("Manually checking navigation button states");
+    
+    // Check if we have button targets
+    console.log(`Previous button target found: ${this.hasPrevButtonTarget}`);
+    console.log(`Next button target found: ${this.hasNextButtonTarget}`);
+    
+    // Get buttons using querySelector as fallback if targets aren't found
+    if (!this.hasPrevButtonTarget) {
+      const prevBtn = document.querySelector('[data-action*="pdf-viewer#prevPage"]');
+      if (prevBtn) {
+        console.log("Found prev button via querySelector");
+        prevBtn.disabled = this.currentPage <= 1;
+      }
+    }
+    
+    if (!this.hasNextButtonTarget) {
+      const nextBtn = document.querySelector('[data-action*="pdf-viewer#nextPage"]');
+      if (nextBtn) {
+        console.log("Found next button via querySelector");
+        nextBtn.disabled = this.currentPage >= (this.pdfDoc ? this.pdfDoc.numPages : 1);
+      }
+    }
+    
+    // Update navigation buttons properly
+    this.updateNavigationButtons();
   }
 } 
