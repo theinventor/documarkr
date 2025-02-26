@@ -146,7 +146,14 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, transform 0.1s;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+/* Add a class for scaled fields */
+.signature-field.field-scaled {
+  transition: transform 0.2s ease-out;
 }
 
 .signature-field:hover {

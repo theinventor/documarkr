@@ -15,6 +15,7 @@ export default class extends Controller {
     this.selectedFieldType = null
     this.fields = []
     this.currentPage = 1
+    this.lastKnownPdfScale = 1.0 // Add tracking for PDF scale
     
     // Enhanced debugging on connection
     console.log("Controller values initialized:")
@@ -42,6 +43,9 @@ export default class extends Controller {
     
     // Load existing fields for current page
     this.loadFieldsForCurrentPage()
+
+    // Listen for PDF scale changes
+    this.listenForPdfScaleChanges()
   }
   
   // New method to check if targets are properly connected
@@ -592,69 +596,81 @@ export default class extends Controller {
   }
 
   loadFieldsForCurrentPage() {
-    console.log(`Loading fields for page ${this.currentPage}`)
+    console.log(`Loading fields for page ${this.currentPage}`);
     
     // Clear previous fields
     this.fields = this.fields.filter(field => {
       // Keep fields on other pages in the array
       if (field.page_number !== this.currentPage) {
-        return true
+        return true;
       }
       
       // Remove fields on this page from the DOM
       if (field.element && field.element.parentNode) {
-        field.element.parentNode.removeChild(field.element)
+        field.element.parentNode.removeChild(field.element);
       }
       
-      return false
-    })
+      return false;
+    });
     
     // Clear fields list UI
     if (this.hasFieldsListTarget) {
-      this.fieldsListTarget.innerHTML = ""
+      this.fieldsListTarget.innerHTML = "";
     }
     
     // Fetch fields for this page from the server
     fetch(`/documents/${this.documentIdValue}/form_fields?page_number=${this.currentPage}`)
       .then(response => response.json())
       .then(data => {
-        console.log("Fields loaded:", data)
+        console.log("Fields loaded:", data);
         
         // Add each field to the PDF
         if (Array.isArray(data)) {
           data.forEach(fieldData => {
-            this.addFieldFromServer(fieldData)
-          })
+            this.addFieldFromServer(fieldData);
+          });
+          
+          // If we have a non-default scale, apply it to all fields that were just added
+          if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
+            console.log(`Applying current scale ${this.lastKnownPdfScale} to newly loaded fields`);
+            this.updateFieldsForZoomChange(this.lastKnownPdfScale);
+          }
         }
       })
       .catch(error => {
-        console.error("Error loading fields:", error)
-      })
+        console.error("Error loading fields:", error);
+      });
   }
 
   addFieldFromServer(fieldData) {
-    console.log("Adding field from server:", fieldData)
+    console.log("Adding field from server:", fieldData);
     
     // Create a field element
-    const fieldElement = document.createElement('div')
-    fieldElement.className = `signature-field field-${fieldData.field_type}`
-    fieldElement.dataset.fieldId = fieldData.id
+    const fieldElement = document.createElement('div');
+    fieldElement.className = `signature-field field-${fieldData.field_type}`;
+    fieldElement.dataset.fieldId = fieldData.id;
     
     // Calculate position in percentages
-    const xPercent = fieldData.x_position
-    const yPercent = fieldData.y_position
-    const widthPercent = fieldData.width
-    const heightPercent = fieldData.height
+    const xPercent = fieldData.x_position;
+    const yPercent = fieldData.y_position;
+    const widthPercent = fieldData.width;
+    const heightPercent = fieldData.height;
     
     // Set position and size using percentage values
-    fieldElement.style.left = `${xPercent}%`
-    fieldElement.style.top = `${yPercent}%`
-    fieldElement.style.width = `${widthPercent}%`
-    fieldElement.style.height = `${heightPercent}%`
+    fieldElement.style.left = `${xPercent}%`;
+    fieldElement.style.top = `${yPercent}%`;
+    fieldElement.style.width = `${widthPercent}%`;
+    fieldElement.style.height = `${heightPercent}%`;
+    
+    // Apply scale transform if we have a non-default scale
+    if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
+      fieldElement.style.transform = `scale(${this.lastKnownPdfScale})`;
+      fieldElement.style.transformOrigin = 'top left';
+    }
     
     // Create a field label element
-    const labelElement = document.createElement('div')
-    labelElement.className = 'field-label'
+    const labelElement = document.createElement('div');
+    labelElement.className = 'field-label';
     
     // Add appropriate icon for the field type
     let fieldIcon = ''
@@ -1025,5 +1041,56 @@ export default class extends Controller {
         listItem.parentNode.removeChild(listItem)
       }
     }
+  }
+
+  // Add method to listen for PDF scale changes
+  listenForPdfScaleChanges() {
+    document.addEventListener('pdf-viewer:scaleChanged', (event) => {
+      console.log('PDF scale change detected:', event.detail);
+      const newScale = event.detail.scale;
+      
+      if (newScale !== this.lastKnownPdfScale) {
+        console.log(`Updating fields for scale change: ${this.lastKnownPdfScale} -> ${newScale}`);
+        this.lastKnownPdfScale = newScale;
+        
+        // Update all visible fields to maintain their relative positions
+        this.updateFieldsForZoomChange(newScale);
+      }
+    });
+  }
+
+  // Update method to update field positions when zoom changes
+  updateFieldsForZoomChange(newScale) {
+    // Only update fields on the current page
+    const currentPageFields = this.fields.filter(field => field.pageNumber === this.currentPage);
+    
+    console.log(`Updating ${currentPageFields.length} fields for zoom scale: ${newScale}`);
+    
+    currentPageFields.forEach(field => {
+      if (field.element) {
+        // Add the field-scaled class for better transitions
+        field.element.classList.add('field-scaled');
+        
+        // Apply the scale transform
+        field.element.style.transform = `scale(${newScale})`;
+        field.element.style.transformOrigin = 'top left';
+        
+        // Calculate any position adjustments needed
+        // This ensures that the field stays aligned with the PDF content
+        // even when the container size changes due to scaling
+        const container = this.containerTarget;
+        const containerRect = container.getBoundingClientRect();
+        
+        // Store the original field position if not already saved
+        if (!field.originalPosition) {
+          field.originalPosition = {
+            left: parseFloat(field.element.style.left), 
+            top: parseFloat(field.element.style.top),
+            width: parseFloat(field.element.style.width),
+            height: parseFloat(field.element.style.height)
+          };
+        }
+      }
+    });
   }
 }

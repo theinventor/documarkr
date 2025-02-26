@@ -71,6 +71,18 @@ export default class extends Controller {
           
           console.log("ZOOM FIX: Zoom IN starting");
           
+          // Get the center point of the viewport relative to the document
+          const viewportCenterX = window.innerWidth / 2;
+          const viewportCenterY = window.innerHeight / 2;
+          
+          // Get the PDF container
+          const pdfContainer = this.containerTarget;
+          const containerRect = pdfContainer.getBoundingClientRect();
+          
+          // Calculate the point on the PDF where the viewport center is
+          const pointXOnPdf = (window.scrollX + viewportCenterX - containerRect.left) / this.currentScale;
+          const pointYOnPdf = (window.scrollY + viewportCenterY - containerRect.top) / this.currentScale;
+          
           // Get current scale
           const oldScale = this.currentScale;
           
@@ -91,7 +103,11 @@ export default class extends Controller {
           
           // IMPORTANT: Manually re-render the current page
           // We can't use reRenderCurrentPage because it might trigger value changes
-          this._manualRenderWithNewScale(newScale);
+          this._manualRenderWithNewScale(newScale, {
+            pointXOnPdf,
+            pointYOnPdf,
+            container: pdfContainer
+          });
           
           // Release zoom lock after a delay
           setTimeout(() => {
@@ -121,6 +137,18 @@ export default class extends Controller {
           
           console.log("ZOOM FIX: Zoom OUT starting");
           
+          // Get the center point of the viewport relative to the document
+          const viewportCenterX = window.innerWidth / 2;
+          const viewportCenterY = window.innerHeight / 2;
+          
+          // Get the PDF container
+          const pdfContainer = this.containerTarget;
+          const containerRect = pdfContainer.getBoundingClientRect();
+          
+          // Calculate the point on the PDF where the viewport center is
+          const pointXOnPdf = (window.scrollX + viewportCenterX - containerRect.left) / this.currentScale;
+          const pointYOnPdf = (window.scrollY + viewportCenterY - containerRect.top) / this.currentScale;
+          
           // Get current scale
           const oldScale = this.currentScale;
           
@@ -140,7 +168,11 @@ export default class extends Controller {
           }
           
           // IMPORTANT: Manually re-render the current page
-          this._manualRenderWithNewScale(newScale);
+          this._manualRenderWithNewScale(newScale, {
+            pointXOnPdf,
+            pointYOnPdf,
+            container: pdfContainer
+          });
           
           // Release zoom lock after a delay
           setTimeout(() => {
@@ -154,7 +186,7 @@ export default class extends Controller {
         });
         
         // Add a manual render method that doesn't trigger value changes
-        this._manualRenderWithNewScale = async (scale) => {
+        this._manualRenderWithNewScale = async (scale, viewportInfo = null) => {
           console.log(`Manual render at scale: ${scale}`);
           
           if (!this.pdfDoc || !this.pages[this.currentPage]) {
@@ -184,6 +216,34 @@ export default class extends Controller {
             await page.render(renderContext).promise;
             console.log("Manual render complete");
             
+            // Dispatch scale change event after rendering is complete
+            this.dispatchScaleChangeEvent();
+            
+            // If we have viewport info, adjust the scroll position to keep the center point stable
+            if (viewportInfo && viewportInfo.pointXOnPdf) {
+              // Wait a tiny bit for the DOM to update
+              setTimeout(() => {
+                // Get new container position after rendering
+                const newContainerRect = viewportInfo.container.getBoundingClientRect();
+                
+                // Calculate where our point should be in the new scale
+                const newPointXInViewport = (viewportInfo.pointXOnPdf * scale) + newContainerRect.left;
+                const newPointYInViewport = (viewportInfo.pointYOnPdf * scale) + newContainerRect.top;
+                
+                // Calculate new scroll position to center this point
+                const newScrollX = newPointXInViewport - (window.innerWidth / 2);
+                const newScrollY = newPointYInViewport - (window.innerHeight / 2);
+                
+                console.log(`Adjusting scroll to keep point (${viewportInfo.pointXOnPdf}, ${viewportInfo.pointYOnPdf}) centered`);
+                
+                // Smoothly scroll to new position
+                window.scrollTo({
+                  left: newScrollX,
+                  top: newScrollY,
+                  behavior: 'auto' // Use 'auto' for immediate scroll without animation
+                });
+              }, 10);
+            }
           } catch (error) {
             console.error("Error in manual render:", error);
           }
@@ -484,9 +544,27 @@ export default class extends Controller {
       const percentage = Math.round(this.currentScale * 100)
       console.log("Updating zoom level display to:", percentage + "%", "Current scale:", this.currentScale);
       this.zoomLevelTarget.textContent = `${percentage}%`
+      
+      // Dispatch scale change event for fields to respond to
+      this.dispatchScaleChangeEvent();
     } else {
       console.warn("No zoom level target found to update display");
     }
+  }
+  
+  // Add method to dispatch scale change event
+  dispatchScaleChangeEvent() {
+    console.log("Dispatching PDF scale change event:", this.currentScale);
+    
+    // Create and dispatch a custom event with scale information
+    const event = new CustomEvent('pdf-viewer:scaleChanged', {
+      bubbles: true,
+      detail: {
+        scale: this.currentScale
+      }
+    });
+    
+    document.dispatchEvent(event);
   }
   
   // This is called when the page value changes
