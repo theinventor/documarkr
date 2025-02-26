@@ -39,10 +39,12 @@ class DocumentSigner < ApplicationRecord
   before_create :generate_token
 
   enum :status, {
-    pending: "pending",
-    completed: "completed",
-    declined: "declined"
-  }, default: "pending"
+    pending: 0,
+    viewed: 1,
+    signed: 2,
+    completed: 3,
+    declined: 4
+  }, default: :pending
 
   scope :pending, -> { where(status: :pending) }
   scope :completed, -> { where(status: [ :signed, :declined ]) }

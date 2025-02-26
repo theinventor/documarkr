@@ -283,12 +283,152 @@
   cursor: ew-resize;
 }
 
+/* Signer-specific field colors - these will override the field type colors */
+.signature-field.signer-1 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+  border-color: #6366f1 !important;
+}
+
+.signature-field.signer-1 .field-label {
+  color: #4f46e5 !important;
+}
+
+.signature-field.signer-2 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border-color: #ef4444 !important;
+}
+
+.signature-field.signer-2 .field-label {
+  color: #dc2626 !important;
+}
+
+.signature-field.signer-3 {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  border-color: #10b981 !important;
+}
+
+.signature-field.signer-3 .field-label {
+  color: #059669 !important;
+}
+
+.signature-field.signer-4 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border-color: #f59e0b !important;
+}
+
+.signature-field.signer-4 .field-label {
+  color: #d97706 !important;
+}
+
+.signature-field.signer-5 {
+  background-color: rgba(139, 92, 246, 0.1) !important;
+  border-color: #8b5cf6 !important;
+}
+
+.signature-field.signer-5 .field-label {
+  color: #7c3aed !important;
+}
+
+/* Signer dropdown styling */
+.signer-color-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.signer-color-1 {
+  background-color: rgba(99, 102, 241, 0.3);
+  border: 1px solid #6366f1;
+}
+
+.signer-color-2 {
+  background-color: rgba(239, 68, 68, 0.3);
+  border: 1px solid #ef4444;
+}
+
+.signer-color-3 {
+  background-color: rgba(16, 185, 129, 0.3);
+  border: 1px solid #10b981;
+}
+
+.signer-color-4 {
+  background-color: rgba(245, 158, 11, 0.3);
+  border: 1px solid #f59e0b;
+}
+
+.signer-color-5 {
+  background-color: rgba(139, 92, 246, 0.3);
+  border: 1px solid #8b5cf6;
+}
+
+/* Signer color indicators for dropdown */
+.signer-option-1::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: rgba(59, 130, 246, 0.3);
+  border: 1px solid #3b82f6;
+}
+
+.signer-option-2::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: rgba(239, 68, 68, 0.3);
+  border: 1px solid #ef4444;
+}
+
+.signer-option-3::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: rgba(16, 185, 129, 0.3);
+  border: 1px solid #10b981;
+}
+
+.signer-option-4::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: rgba(245, 158, 11, 0.3);
+  border: 1px solid #f59e0b;
+}
+
+.signer-option-5::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: rgba(139, 92, 246, 0.3);
+  border: 1px solid #8b5cf6;
+}
+
+/* Keep the original field type colors as fallbacks */
 .field-signature {
   background-color: rgba(99, 102, 241, 0.1);
+  border-color: #6366f1;
 }
 
 .field-initials {
   background-color: rgba(99, 102, 241, 0.1);
+  border-color: #6366f1;
 }
 
 .field-text {

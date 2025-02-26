@@ -28,6 +28,9 @@ class DocumentSignersController < ApplicationController
   def create
     @document_signer = @document.document_signers.new(document_signer_params)
 
+    # Explicitly set the status to pending
+    @document_signer.status = :pending
+
     # Find or create user by email
     user = User.find_by(email: @document_signer.email)
 

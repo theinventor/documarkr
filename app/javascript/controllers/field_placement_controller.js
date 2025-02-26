@@ -39,6 +39,9 @@ export default class extends Controller {
         this.signerIdValue = this.signerSelectTarget.value
         this.enableToolbarButtons()
       }
+      
+      // Enhance the signer dropdown with color indicators
+      this.enhanceSignerDropdown()
     }, 500) // Reduced from 1000ms to 500ms
     
     // Load existing fields for current page
@@ -331,6 +334,16 @@ export default class extends Controller {
     const fieldElement = document.createElement("div")
     fieldElement.classList.add("signature-field", `field-${this.selectedFieldType}`)
     fieldElement.style.position = "absolute"
+    
+    // Add signer-specific class for color coding
+    if (this.signerIdValue) {
+      // Get the signer index from the signerSelect dropdown
+      const signerIndex = this.getSignerIndexById(this.signerIdValue);
+      if (signerIndex > 0) {
+        // Add signer class (signer-1, signer-2, etc.)
+        fieldElement.classList.add(`signer-${signerIndex}`);
+      }
+    }
     
     // Set position using percentage values instead of pixels
     const xPercent = (canvasX / this.containerRect.width) * 100
@@ -670,8 +683,22 @@ export default class extends Controller {
     // Create a field element
     const fieldElement = document.createElement('div');
     fieldElement.className = `signature-field field-${fieldData.field_type}`;
+    
+    // Add signer-specific class for color coding
+    if (fieldData.document_signer_id) {
+      // Get the signer index from the signerSelect dropdown
+      const signerIndex = this.getSignerIndexById(fieldData.document_signer_id);
+      if (signerIndex > 0) {
+        // Add signer class (signer-1, signer-2, etc.)
+        fieldElement.classList.add(`signer-${signerIndex}`);
+      }
+    }
+    
+    // Set the ID with db- prefix to indicate it's from the database
+    fieldElement.id = `db-${fieldData.id}`;
     fieldElement.dataset.fieldId = fieldData.id;
     fieldElement.dataset.page = fieldData.page_number; // Add page attribute for filtering
+    fieldElement.dataset.signerId = fieldData.document_signer_id; // Store signer ID for reference
     
     // Calculate position in percentages
     const xPercent = fieldData.x_position;
@@ -738,24 +765,25 @@ export default class extends Controller {
     // Add the field element to the container
     this.containerTarget.appendChild(fieldElement)
     
-    // Add to fields array
+    // Add to fields array with complete data
     const fieldObj = {
-      id: `field-${Date.now()}`,
       serverId: fieldData.id,
-      type: fieldData.field_type,
-      element: fieldElement,
-      x: xPercent,
-      y: yPercent,
+      field_type: fieldData.field_type,
+      document_id: this.documentIdValue,
+      document_signer_id: fieldData.document_signer_id,
+      page_number: fieldData.page_number,
+      x_position: xPercent,
+      y_position: yPercent,
       width: widthPercent,
       height: heightPercent,
-      pageNumber: fieldData.page_number,
-      signerId: fieldData.document_signer_id
+      required: fieldData.required,
+      element: fieldElement
     }
     
     this.fields.push(fieldObj)
     
-    // Add field to the list
-    this.addFieldToList(fieldObj.id, fieldData)
+    // Add to the fields list in the UI
+    this.addFieldToList(fieldObj.serverId, fieldData)
     
     return fieldObj
   }
@@ -981,7 +1009,16 @@ export default class extends Controller {
     
     // Find the field in our fields array
     const fieldId = this.activeFieldElement.id;
-    const fieldIndex = this.fields.findIndex(field => field.id === fieldId);
+    let fieldIndex = -1;
+    
+    // Check if this is a field loaded from the database (has 'db-' prefix)
+    if (fieldId.startsWith('db-')) {
+      const serverId = parseInt(fieldId.replace('db-', ''));
+      fieldIndex = this.fields.findIndex(field => field.serverId === serverId);
+    } else {
+      // Regular client-side ID
+      fieldIndex = this.fields.findIndex(field => field.id === fieldId);
+    }
     
     if (fieldIndex !== -1) {
       const field = this.fields[fieldIndex];
@@ -995,7 +1032,13 @@ export default class extends Controller {
       // Save changes to server
       if (field.serverId) {
         this.updateFieldOnServer(field);
+      } else if (fieldId.startsWith('db-')) {
+        // If we have a db- prefix but no serverId in the field object
+        field.serverId = parseInt(fieldId.replace('db-', ''));
+        this.updateFieldOnServer(field);
       }
+    } else {
+      console.error(`Could not find field with ID ${fieldId} in fields array`);
     }
     
     // Clear resize data
@@ -1006,6 +1049,8 @@ export default class extends Controller {
   }
 
   updateFieldOnServer(field) {
+    console.log(`Updating field with server ID ${field.serverId}:`, field);
+    
     // Create a FormData object to send to the server
     const formData = new FormData();
     
@@ -1023,7 +1068,12 @@ export default class extends Controller {
         "X-CSRF-Token": document.querySelector("meta[name='csrf-token']").content
       }
     })
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    })
     .then(data => {
       console.log("Field updated successfully:", data);
     })
@@ -1066,10 +1116,12 @@ export default class extends Controller {
       this.fields.splice(fieldIndex, 1)
       
       // Remove the list item from the fields list
-      const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${field.id}"]`)
+      const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${fieldId}"]`)
       if (listItem) {
         listItem.parentNode.removeChild(listItem)
       }
+    } else {
+      console.error(`Could not find field with server ID ${fieldId} in fields array`)
     }
   }
 
@@ -1139,5 +1191,83 @@ export default class extends Controller {
         this.loadFieldsForCurrentPage();
       }
     });
+  }
+
+  // Helper method to get signer index by ID
+  getSignerIndexById(signerId) {
+    console.log(`Getting signer index for ID: ${signerId}`);
+    
+    if (!this.hasSignerSelectTarget) {
+      console.warn("No signer select target found");
+      return 0;
+    }
+    
+    if (!signerId) {
+      console.warn("No signer ID provided");
+      return 0;
+    }
+    
+    const options = Array.from(this.signerSelectTarget.options);
+    console.log(`Found ${options.length} options in signer select`);
+    
+    for (let i = 0; i < options.length; i++) {
+      console.log(`Option ${i}: value=${options[i].value}, signerId=${signerId}, match=${options[i].value === signerId.toString()}`);
+      if (options[i].value === signerId.toString()) {
+        console.log(`Found match at index ${i}`);
+        return i; // Return the index (0 is "Select a signer", so actual signers start at 1)
+      }
+    }
+    
+    console.warn(`No matching signer found for ID: ${signerId}`);
+    return 0;
+  }
+
+  // Method to enhance the signer dropdown with color indicators
+  enhanceSignerDropdown() {
+    if (!this.hasSignerSelectTarget) return;
+    
+    console.log("Enhancing signer dropdown with color indicators");
+    
+    // Get all options in the dropdown
+    const options = Array.from(this.signerSelectTarget.options);
+    
+    // Skip the first option which is usually "Select a signer"
+    for (let i = 1; i < options.length; i++) {
+      const option = options[i];
+      // Add signer-option-N class to each option based on its index
+      option.classList.add(`signer-option-${i}`);
+      console.log(`Added class signer-option-${i} to option: ${option.text}`);
+    }
+    
+    // Add an event listener to update the selected option display
+    this.signerSelectTarget.addEventListener('change', this.updateSelectedSignerDisplay.bind(this));
+    
+    // Initial update of the selected signer display
+    this.updateSelectedSignerDisplay();
+  }
+  
+  // Update the display of the selected signer with color
+  updateSelectedSignerDisplay() {
+    if (!this.hasSignerSelectTarget) return;
+    
+    const selectedIndex = this.signerSelectTarget.selectedIndex;
+    
+    // If there's a previous indicator, remove it
+    const previousIndicator = this.signerSelectTarget.parentNode.querySelector('.signer-color-indicator');
+    if (previousIndicator) {
+      previousIndicator.remove();
+    }
+    
+    // If a signer is selected (not the default option)
+    if (selectedIndex > 0) {
+      // Create a color indicator
+      const colorIndicator = document.createElement('span');
+      colorIndicator.classList.add('signer-color-indicator', `signer-color-${selectedIndex}`);
+      
+      // Insert it before the select
+      this.signerSelectTarget.parentNode.insertBefore(colorIndicator, this.signerSelectTarget);
+      
+      console.log(`Added color indicator for signer index ${selectedIndex}`);
+    }
   }
 }
