@@ -10,42 +10,63 @@ export default class extends Controller {
   }
 
   connect() {
-    this.initializeCanvas()
+    console.log("Signature pad controller connected");
     
-    if (this.hasSavedImageDataValue && this.savedImageDataValue) {
-      this.loadSavedSignature()
-    }
+    // Delay initialization to ensure container is fully rendered
+    setTimeout(() => {
+      this.initializeCanvas();
+      
+      if (this.hasSavedImageDataValue && this.savedImageDataValue) {
+        this.loadSavedSignature();
+      }
+    }, 100);
   }
   
   initializeCanvas() {
-    this.canvas = this.canvasTarget
-    this.ctx = this.canvas.getContext("2d")
+    this.canvas = this.canvasTarget;
+    this.ctx = this.canvas.getContext("2d");
     
-    // Set canvas size to match container
-    this.resizeCanvas()
+    console.log("Initializing canvas, container size:", 
+      this.canvas.parentElement ? 
+      { width: this.canvas.parentElement.clientWidth, height: this.canvas.parentElement.clientHeight } : 
+      "No parent element");
+    
+    // Set canvas size to match container with fallback minimum size
+    this.resizeCanvas();
     
     // Set up drawing properties
-    this.ctx.strokeStyle = this.colorValue
-    this.ctx.lineWidth = this.lineWidthValue
-    this.ctx.lineCap = "round"
-    this.ctx.lineJoin = "round"
+    this.ctx.strokeStyle = this.colorValue;
+    this.ctx.lineWidth = this.lineWidthValue;
+    this.ctx.lineCap = "round";
+    this.ctx.lineJoin = "round";
     
     // Track drawing state
-    this.isDrawing = false
-    this.lastX = 0
-    this.lastY = 0
+    this.isDrawing = false;
+    this.lastX = 0;
+    this.lastY = 0;
     
     // Set up events
-    this.setupEventListeners()
+    this.setupEventListeners();
     
     // Clear canvas to start
-    this.clearCanvas()
+    this.clearCanvas();
   }
   
   resizeCanvas() {
-    const container = this.canvas.parentElement
-    this.canvas.width = container.clientWidth
-    this.canvas.height = container.clientHeight || 150
+    const container = this.canvas.parentElement;
+    
+    // Ensure minimum dimensions if container is not yet sized
+    const width = (container && container.clientWidth) || 300;
+    const height = (container && container.clientHeight) || 150;
+    
+    console.log(`Setting canvas size to ${width}×${height}`);
+    
+    this.canvas.width = width;
+    this.canvas.height = height;
+    
+    // Apply inline styles to ensure canvas is visible
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
   }
   
   setupEventListeners() {
@@ -146,28 +167,59 @@ export default class extends Controller {
   }
   
   clearCanvas() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-    this.updateSaveButtonState()
+    // Ensure canvas has valid dimensions before clearing
+    if (this.canvas.width === 0 || this.canvas.height === 0) {
+      console.warn("Canvas has zero width or height, resizing before clearing");
+      this.resizeCanvas();
+    }
+    
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Safely update the save button state
+    try {
+      this.updateSaveButtonState();
+    } catch (error) {
+      console.error("Error updating save button state:", error);
+    }
     
     // Dispatch an event indicating the signature was cleared
-    this.dispatch("clear")
+    this.dispatch("clear");
   }
   
   updateSaveButtonState() {
-    if (!this.hasSaveButtonTarget) return
+    if (!this.hasSaveButtonTarget) return;
     
-    // Check if canvas is empty
-    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height).data
-    const isEmpty = !imageData.some(channel => channel !== 0)
+    // Safety check - don't proceed with zero-sized canvas
+    if (this.canvas.width === 0 || this.canvas.height === 0) {
+      console.warn("Cannot update save button - canvas has zero dimensions");
+      if (this.saveButtonTarget) {
+        this.saveButtonTarget.disabled = true;
+        this.saveButtonTarget.classList.add("opacity-50", "cursor-not-allowed");
+        this.saveButtonTarget.classList.remove("hover:bg-indigo-700");
+      }
+      return;
+    }
     
-    this.saveButtonTarget.disabled = isEmpty
-    
-    if (isEmpty) {
-      this.saveButtonTarget.classList.add("opacity-50", "cursor-not-allowed")
-      this.saveButtonTarget.classList.remove("hover:bg-indigo-700")
-    } else {
-      this.saveButtonTarget.classList.remove("opacity-50", "cursor-not-allowed")
-      this.saveButtonTarget.classList.add("hover:bg-indigo-700")
+    try {
+      // Check if canvas is empty
+      const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height).data;
+      const isEmpty = !imageData.some(channel => channel !== 0);
+      
+      this.saveButtonTarget.disabled = isEmpty;
+      
+      if (isEmpty) {
+        this.saveButtonTarget.classList.add("opacity-50", "cursor-not-allowed");
+        this.saveButtonTarget.classList.remove("hover:bg-indigo-700");
+      } else {
+        this.saveButtonTarget.classList.remove("opacity-50", "cursor-not-allowed");
+        this.saveButtonTarget.classList.add("hover:bg-indigo-700");
+      }
+    } catch (error) {
+      console.error("Error checking canvas content:", error);
+      // Set button to disabled state if we can't check the canvas
+      if (this.saveButtonTarget) {
+        this.saveButtonTarget.disabled = true;
+      }
     }
   }
   

@@ -14,9 +14,24 @@ export default class extends Controller {
   
   connect() {
     console.log("Field signing controller connected");
+    
     // Install event listeners
     this.handlePageChangeEvent = this.handlePageChangeEvent.bind(this);
     document.addEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
+    
+    // Explicitly bind updateFieldPositions
+    this.boundUpdateFieldPositions = this.updateFieldPositions.bind(this);
+    
+    // Listen for PDF viewer scale changes and loaded events
+    document.addEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
+    document.addEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
+    
+    // Check if container target exists and log result
+    if (this.hasContainerTarget) {
+      console.log("Container target found:", this.containerTarget);
+    } else {
+      console.warn("Container target is missing! Field positioning will not work properly.");
+    }
     
     // Set up CSS for field positioning
     this.setupFieldPositionStyles();
@@ -35,31 +50,36 @@ export default class extends Controller {
     
     // Check if all signatures are complete
     this.checkCompletionStatus();
+    
+    // Add a failsafe for field positioning
+    setTimeout(() => {
+      console.log("Running field positioning failsafe");
+      this.updateFieldPositions();
+    }, 2000);
   }
   
   disconnect() {
     // Clean up event listener when controller is disconnected
     document.removeEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
+    document.removeEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
+    document.removeEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
   }
   
   // Event handler for the PDF viewer's page change event
   handlePageChangeEvent(event) {
-    // Pass the event to our handler
-    this.handlePageChange(event);
+    console.log("Page change event received:", event);
+    // In the new layout with all pages displayed, we just need to ensure
+    // fields are positioned correctly
+    this.updateFieldPositions();
   }
   
   initialize() {
     const currentPage = this.pageValue || 1;
     console.log(`Initializing with current page: ${currentPage}`);
 
-    // Show/hide fields based on current page
+    // In the new layout, all fields should be visible
     this.fieldTargets.forEach(field => {
-      const fieldPage = parseInt(field.dataset.page, 10);
-      if (fieldPage === currentPage) {
-        field.classList.remove('hidden-field');
-      } else {
-        field.classList.add('hidden-field');
-      }
+      field.classList.remove('hidden-field');
     });
   }
   
@@ -67,7 +87,6 @@ export default class extends Controller {
   setupFieldPositionStyles() {
     console.log("Setting up field position styles");
     
-    // Position each field based on its data attributes
     this.fieldTargets.forEach((field, index) => {
       const xPos = field.dataset.xPosition;
       const yPos = field.dataset.yPosition;
@@ -75,14 +94,21 @@ export default class extends Controller {
       const height = field.dataset.height;
       const fieldType = field.dataset.fieldType;
       const isCompleted = field.dataset.completed === "true";
+      const pageNumber = parseInt(field.dataset.page, 10);
       
-      // Apply positioning directly to elements
+      // Store the page number for later use
+      field.setAttribute('data-page-number', pageNumber);
+      
+      // Apply initial positioning directly to elements
       field.style.position = 'absolute';
       field.style.left = `${xPos}%`;
       field.style.top = `${yPos}%`;
       field.style.width = `${width}px`;
       field.style.height = `${height}px`;
       field.style.transform = 'translate(-50%, -50%)';
+      
+      // Add a class to identify the page this field belongs to
+      field.classList.add(`page-${pageNumber}-field`);
       
       // If the field is not already completed, convert it to an appropriate input
       if (!isCompleted) {
@@ -136,10 +162,106 @@ export default class extends Controller {
     });
   }
   
-  // Position a field based on its data attributes - no longer needed, using class-based approach
-  positionField(field) {
-    // Positioning is now handled by setupFieldPositionStyles
-    // No need to do anything here
+  // Update field positions based on the current PDF pages in the DOM
+  updateFieldPositions() {
+    console.log("Updating field positions for multi-page layout");
+    
+    // Check if we have a container target
+    if (!this.hasContainerTarget) {
+      console.error("Missing container target! Cannot position fields.");
+      return;
+    }
+    
+    // Find all PDF page containers in the document - specifically inside the pdf-pages-container
+    const pagesContainer = document.querySelector('.pdf-pages-container');
+    if (!pagesContainer) {
+      console.warn("No pages container found - delaying field positioning");
+      setTimeout(() => this.updateFieldPositions(), 500);
+      return;
+    }
+    
+    const pageContainers = pagesContainer.querySelectorAll('.pdf-page-container');
+    
+    if (!pageContainers.length) {
+      console.log("No page containers found yet, will try again later");
+      setTimeout(() => this.updateFieldPositions(), 500);
+      return;
+    }
+    
+    console.log(`Found ${pageContainers.length} page containers`);
+    
+    try {
+      // Get the container rect to calculate relative positions
+      const containerRect = this.containerTarget.getBoundingClientRect();
+      
+      // For each page, find its top offset and position fields accordingly
+      pageContainers.forEach(pageContainer => {
+        const pageNumber = parseInt(pageContainer.dataset.page, 10);
+        const pageCanvas = pageContainer.querySelector('canvas');
+        
+        if (!pageCanvas) {
+          console.log(`No canvas found for page ${pageNumber}`);
+          return;
+        }
+        
+        const pageRect = pageCanvas.getBoundingClientRect();
+        
+        // Calculate page offset relative to container
+        const pageOffsetTop = pageRect.top - containerRect.top;
+        const pageOffsetLeft = pageRect.left - containerRect.left;
+        
+        console.log(`Page ${pageNumber} positioned at: left=${pageOffsetLeft}, top=${pageOffsetTop}, width=${pageRect.width}, height=${pageRect.height}`);
+        
+        // Find all fields for this page
+        const fields = this.fieldTargets.filter(field => 
+          parseInt(field.dataset.page, 10) === pageNumber
+        );
+        
+        console.log(`Found ${fields.length} fields for page ${pageNumber}`);
+        
+        fields.forEach(field => {
+          // Get the position as percentage of the page
+          const xPosPercent = parseFloat(field.dataset.xPosition);
+          const yPosPercent = parseFloat(field.dataset.yPosition);
+          
+          // Calculate absolute position within the page
+          const xPosAbsolute = (xPosPercent / 100) * pageRect.width;
+          const yPosAbsolute = (yPosPercent / 100) * pageRect.height;
+          
+          // Set absolute position relative to the container
+          field.style.position = 'absolute';
+          field.style.left = `${pageOffsetLeft + xPosAbsolute}px`;
+          field.style.top = `${pageOffsetTop + yPosAbsolute}px`;
+          
+          // Set the width and height based on the scaled page
+          const fieldWidth = parseFloat(field.dataset.width);
+          const fieldHeight = parseFloat(field.dataset.height);
+          
+          // Apply the same scale factor that's being used on the page
+          const scale = pageRect.width / pageCanvas.width;
+          field.style.width = `${fieldWidth * scale}px`;
+          field.style.height = `${fieldHeight * scale}px`;
+          
+          // Use transform for centering (offset by 50% of the field's width and height)
+          field.style.transform = 'translate(-50%, -50%)';
+          
+          // Make field visible now that it's correctly positioned
+          field.classList.add('positioned');
+          
+          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
+        });
+      });
+    } catch (error) {
+      console.error("Error positioning fields:", error);
+    }
+  }
+  
+  // Handle the page change event
+  handlePageChange(event) {
+    console.log("Page change event received:", event);
+    // In the new layout with all pages displayed, we just need to ensure
+    // fields are positioned correctly
+    this.updateFieldPositions();
   }
   
   openSignatureModal(event) {
@@ -402,25 +524,6 @@ export default class extends Controller {
     })
     .catch(error => {
       console.error('Error completing document:', error);
-    });
-  }
-  
-  // Handle page changes from the PDF viewer
-  handlePageChange(event) {
-    const currentPage = event.detail.page;
-    this.pageValue = currentPage;
-    console.log(`Page changed to ${currentPage}`);
-    
-    // Show/hide fields based on the current page
-    this.fieldTargets.forEach(field => {
-      const fieldPage = parseInt(field.dataset.page, 10);
-      
-      // Use CSS classes to show/hide fields
-      if (fieldPage === currentPage) {
-        field.classList.remove('hidden-field');
-      } else {
-        field.classList.add('hidden-field');
-      }
     });
   }
   

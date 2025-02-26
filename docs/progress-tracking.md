@@ -196,3 +196,133 @@ Route Pattern Improvement:
 - Updated JavaScript controllers to use the new route pattern
 - This creates a clearer separation between authenticated document routes (`/documents/...`) and public signing routes (`/sign/...`)
 
+Checkpoint: Feb 26th, 2025
+- You can register and sign up
+- You can create documents
+- You can upload a PDF and add fields to it
+- You can add signers to the document and send them a signing link
+- They can click and view the sign page (WIP)
+
+3-1-25
+PDF Viewer UI Improvements:
+- Problem: PDF viewer only showed one page at a time with Next/Previous buttons
+- Solution: Updated PDF viewer to render all pages at once vertically
+- Implementation details:
+  - Modified `pdf_viewer_controller.js`:
+    - Added `renderAllPages()` method to render all pages vertically
+    - Set initial scale to exactly 100% by default
+    - Modified zoom functionality to apply to all pages
+    - Kept legacy navigation methods for compatibility
+  - Updated the signing view:
+    - Removed pagination controls
+    - Updated toolbar to show total page count
+  - Enhanced field positioning:
+    - Updated field_signing_controller.js to position fields on multiple pages
+    - Added updateFieldPositions() method to calculate absolute positions
+    - Added event listeners for scale changes and PDF loading
+  - Added CSS for multi-page layout:
+    - Created pdf-pages-container styles
+    - Updated form-field classes for positioning in multi-page view
+    - Added transition states for fields (hidden until positioned)
+- Key files changed:
+  - app/javascript/controllers/pdf_viewer_controller.js
+  - app/javascript/controllers/field_signing_controller.js
+  - app/views/public_signing/show.html.erb
+  - app/assets/stylesheets/app.css
+
+Checkpoint: March 1st, 2025
+- PDF signing view shows all pages vertically at 100% zoom
+- Form fields are positioned correctly on each page
+- Fields become visible only after being positioned correctly
+- Zoom controls work for all pages simultaneously
+
+3-2-25
+PDF Viewer Bug Fixes:
+- Problem: Error loading document with "this.updatePageCount is not a function"
+- Root cause: Missing method in pdf_viewer_controller.js
+- Solution: Added updatePageCount method to update the page count display
+- Additional fix: Corrected pdfjsLib reference in loadDocument method
+- Key files changed:
+  - app/javascript/controllers/pdf_viewer_controller.js
+
+Checkpoint: March 2nd, 2025
+- PDF viewer loads documents without errors
+- All pages display vertically at 100% zoom
+- Form fields are correctly positioned on each page
+
+3-3-25
+PDF Viewer and Field Positioning Improvements:
+- Problem: Zoom only affecting first page and fields not showing at all
+- Solution: Implemented proper zoom handling for multi-page view
+- Implementation details:
+  - Updated pdf_viewer_controller.js:
+    - Fixed scaleValueChanged to re-render all pages when scale changes
+    - Added Promise.all to ensure all pages are rendered before triggering events
+    - Improved position preservation during zoom
+    - Added more detailed event data for scale change events
+  - Updated field_signing_controller.js:
+    - Improved field positioning system with robust page-relative coordinates
+    - Added event listeners for scale changes with proper binding
+    - Added additional logging for better troubleshooting
+    - Added failsafe timer for field positioning
+  - Enhanced CSS styling:
+    - Made fields initially invisible until properly positioned
+    - Added 'positioned' class to show fields after correct positioning
+    - Improved visual styling of form fields
+- Key files changed:
+  - app/javascript/controllers/pdf_viewer_controller.js
+  - app/javascript/controllers/field_signing_controller.js
+  - app/assets/stylesheets/app.css
+
+3-4-25
+Controller Error Fixes:
+- Problem: Browser console showed multiple errors related to missing targets and canvas sizing
+- Root causes:
+  1. Missing `container` target in field_signing_controller.js
+  2. Canvas size errors in signature_pad_controller.js causing "Failed to execute 'getImageData'" errors
+  3. DOM structure issues in the field container layout
+- Solutions:
+  1. Fixed field_signing_controller.js:
+     - Added safety checks for the missing container target
+     - Improved error handling in the updateFieldPositions method
+     - Fixed event handling to avoid errors when targets are missing
+  2. Fixed signature_pad_controller.js:
+     - Added minimum size settings for the canvas (300×150)
+     - Added delay to initialize canvas after container is ready
+     - Added try/catch blocks to prevent errors from crashing the application
+     - Fixed canvas resize logic to handle zero-dimension cases
+  3. Updated view template:
+     - Fixed container positioning to ensure form fields layer covers the whole document
+     - Improved positioning of the container target elements
+     - Updated CSS for better container visibility
+- Key files changed:
+  - app/javascript/controllers/field_signing_controller.js
+  - app/javascript/controllers/signature_pad_controller.js
+  - app/views/public_signing/show.html.erb
+
+Checkpoint: March 4th, 2025
+- Browser console errors eliminated
+- Signature pad initializes properly with correct dimensions
+- Form fields positioned correctly with proper error handling
+- Improved reliability of the multi-page PDF view
+
+3-5-25
+Multi-Page Zoom Fix:
+- Problem: Zoom functionality only affected the first page
+- Root cause: Issues in pdf_viewer_controller.js with how zoom was applied across pages
+- Solution: Comprehensive update to zoom functionality
+  - Fixed scaleValueChanged method to properly re-render all pages
+  - Improved page rendering to handle multi-page layout
+  - Updated event dispatching order to ensure fields are repositioned after zoom
+  - Modified field positioning logic to scale field dimensions with page zoom
+  - Enhanced CSS to better handle field visibility during zoom operations
+- Key files changed:
+  - app/javascript/controllers/pdf_viewer_controller.js
+  - app/javascript/controllers/field_signing_controller.js
+  - app/assets/stylesheets/app.css
+
+Checkpoint: March 5th, 2025
+- Zoom functionality now works correctly across all pages
+- Form fields maintain proper positioning and scaling when zooming
+- Page navigation and field positioning in multi-page view is fully functional
+- Fixed CSS styling for better field visibility and user experience
