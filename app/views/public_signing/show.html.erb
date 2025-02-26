@@ -78,16 +78,20 @@
               <%# Form Fields Layer %>
               <div class="absolute inset-0 pointer-events-none" data-field-signing-target="container">
                 <% @form_fields.each do |field| %>
-                  <div class="absolute pointer-events-auto" 
-                    style="left: <%= field.x_position %>%; top: <%= field.y_position %>%; width: <%= field.width %>px; height: <%= field.height %>px; transform: translate(-50%, -50%);"
+                  <div 
                     data-field-signing-target="field"
                     data-field-type="<%= field.field_type %>"
                     data-field-id="field-<%= field.id %>"
                     data-completed="<%= field.completed ? 'true' : 'false' %>"
-                    data-required="<%= field.required ? 'true' : 'false' %>"
+                    data-required="true"
                     data-page="<%= field.page_number %>"
+                    data-x-position="<%= field.x_position %>"
+                    data-y-position="<%= field.y_position %>"
+                    data-width="<%= field.width %>"
+                    data-height="<%= field.height %>"
                     data-action="click->field-signing#openSignatureModal"
-                    class="<%= field.completed ? 'border border-solid bg-gray-50' : 'border border-dashed' %> rounded-md flex items-center justify-center cursor-pointer <%= field.required ? 'border-blue-500' : 'border-gray-400' %> hover:border-blue-600">
+                    class="form-field <%= field.completed ? 'completed' : '' %>"
+                    >
                     
                     <% if field.completed && field.value.present? %>
                       <% if field.field_type == 'signature' || field.field_type == 'initials' %>
@@ -100,9 +104,7 @@
                     <% else %>
                       <div class="text-xs text-gray-500 text-center p-1">
                         <%= field.field_type.capitalize %>
-                        <% if field.required %>
-                          <span class="text-red-500">*</span>
-                        <% end %>
+                        <span class="text-red-500">*</span>
                       </div>
                     <% end %>
                   </div>
