@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_02_26_060217) do
+ActiveRecord::Schema[8.0].define(version: 2025_02_26_211838) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -55,7 +55,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_26_060217) do
   create_table "document_signers", force: :cascade do |t|
     t.integer "document_id", null: false
     t.integer "user_id"
-    t.integer "order", default: 0
+    t.integer "sign_order", default: 0
     t.integer "status", null: false
     t.datetime "viewed_at"
     t.datetime "signed_at"
@@ -66,7 +66,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_26_060217) do
     t.string "name"
     t.string "email"
     t.string "token"
-    t.index ["document_id", "order"], name: "index_document_signers_on_document_id_and_order"
+    t.index ["document_id", "sign_order"], name: "index_document_signers_on_document_id_and_sign_order"
     t.index ["document_id"], name: "index_document_signers_on_document_id"
     t.index ["user_id"], name: "index_document_signers_on_user_id"
   end

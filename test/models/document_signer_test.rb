@@ -6,7 +6,7 @@
 #  email       :string
 #  ip_address  :string
 #  name        :string
-#  order       :integer          default(0)
+#  sign_order  :integer          default(0)
 #  signed_at   :datetime
 #  status      :integer          not null
 #  token       :string
@@ -19,9 +19,9 @@
 #
 # Indexes
 #
-#  index_document_signers_on_document_id            (document_id)
-#  index_document_signers_on_document_id_and_order  (document_id,order)
-#  index_document_signers_on_user_id                (user_id)
+#  index_document_signers_on_document_id                 (document_id)
+#  index_document_signers_on_document_id_and_sign_order  (document_id,sign_order)
+#  index_document_signers_on_user_id                     (user_id)
 #
 # Foreign Keys
 #

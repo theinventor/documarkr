@@ -27,9 +27,11 @@ class DocumentSignersController < ApplicationController
   # POST /documents/:document_id/document_signers
   def create
     @document_signer = @document.document_signers.new(document_signer_params)
+    @document_signer.status = "pending"
 
-    # Explicitly set the status to pending
-    @document_signer.status = :pending
+    # Set order to be the next available number
+    max_order = @document.document_signers.maximum(:sign_order) || -1
+    @document_signer.sign_order = max_order + 1
 
     # Find or create user by email
     user = User.find_by(email: @document_signer.email)
@@ -84,6 +86,6 @@ class DocumentSignersController < ApplicationController
   end
 
   def document_signer_params
-    params.require(:document_signer).permit(:email, :name, :order)
+    params.require(:document_signer).permit(:email, :name, :sign_order)
   end
 end
