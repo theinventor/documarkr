@@ -66,9 +66,10 @@
               </div>
             </div>
             
-            <%# Form Fields Layer %>
+            <%# Form Fields Layer - CRITICAL: Ensure pointer-events-auto on the field layer %>
             <div class="absolute top-0 left-0 w-full h-full pointer-events-none" data-field-signing-target="container">
               <% @form_fields.each do |field| %>
+                <%# The individual fields need pointer-events-auto to be clickable %>
                 <div 
                   data-field-signing-target="field"
                   data-field-type="<%= field.field_type %>"
@@ -80,9 +81,10 @@
                   data-y-position="<%= field.y_position %>"
                   data-width="<%= field.width %>"
                   data-height="<%= field.height %>"
-                  data-action="click->field-signing#openSignatureModal"
-                  class="form-field <%= field.completed ? 'completed' : '' %>"
-                  >
+                  data-action="<%= field.field_type == 'text' || field.field_type == 'date' ? 'click->field-signing#handleFieldClick' : 'click->field-signing#openSignatureModal' %>"
+                  class="form-field <%= field.completed ? 'completed' : '' %> cursor-pointer absolute pointer-events-auto hover:bg-blue-50 rounded transition-colors"
+                  style="border: <%= field.completed ? '1px solid #4CAF50' : '1px dashed #2563EB' %>; 
+                         background-color: <%= field.completed ? 'rgba(220, 252, 231, 0.5)' : 'rgba(239, 246, 255, 0.5)' %>;">
                   
                   <% if field.completed && field.value.present? %>
                     <% if field.field_type == 'signature' || field.field_type == 'initials' %>
@@ -104,8 +106,123 @@
           </div>
         </div>
       </div>
+      
+      <%# Signing Instructions %>
+      <div class="bg-white p-4 rounded-lg shadow-sm mt-4">
+        <h3 class="text-lg font-medium text-gray-900">Signing Instructions</h3>
+        <ul class="mt-2 text-sm text-gray-600 space-y-2">
+          <li class="flex items-start">
+            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span><strong>Text Fields:</strong> Click on any text field to type directly.</span>
+          </li>
+          <li class="flex items-start">
+            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span><strong>Date Fields:</strong> Click on any date field to open a date picker. Today's date is pre-filled.</span>
+          </li>
+          <li class="flex items-start">
+            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span><strong>Signature/Initials:</strong> Click to draw your signature or initials using our signature pad.</span>
+          </li>
+          <li class="flex items-start">
+            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span><strong>Submit:</strong> Once all required fields are completed, the submit button will be enabled.</span>
+          </li>
+        </ul>
+      </div>
+      
+      <%# Signing Modal - MOVED INSIDE the controller div %>
+      <%= render 'signing_modal' %>
     </div>
   </main>
+
+  <%# Add metadata for CSRF protection %>
+  <%= csrf_meta_tags %>
   
-  <%= render 'signing_modal' %>
+  <%# Developer debug info - remove in production %>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log("Document loaded - checking field elements:");
+      
+      const fields = document.querySelectorAll('[data-field-signing-target="field"]');
+      console.log(`Found ${fields.length} field elements on the page`);
+      
+      fields.forEach((field, index) => {
+        console.log(`Field ${index + 1}: type=${field.dataset.fieldType}, id=${field.dataset.fieldId}, action=${field.getAttribute('data-action')}`);
+        
+        // Add direct click handler as a backup
+        field.addEventListener('click', function(e) {
+          console.log(`Direct click on field ${field.dataset.fieldId} (${field.dataset.fieldType})`);
+          
+          // Force direct DOM manipulation as a fallback
+          const fieldType = field.dataset.fieldType;
+          const fieldId = field.dataset.fieldId;
+          
+          if (fieldType === 'text' || fieldType === 'date') {
+            // For text/date fields, focus or create the input
+            let input = field.querySelector('input');
+            if (!input) {
+              // Create input if needed
+              input = document.createElement('input');
+              input.type = fieldType === 'text' ? 'text' : 'date';
+              input.className = 'w-full h-full p-1 text-sm border-none focus:ring-2 focus:ring-blue-500 bg-transparent';
+              input.placeholder = fieldType === 'text' ? 'Type here...' : '';
+              
+              if (fieldType === 'date') {
+                const today = new Date().toISOString().split('T')[0];
+                input.value = today;
+              }
+              
+              field.innerHTML = '';
+              field.appendChild(input);
+            }
+            
+            input.focus();
+            if (fieldType === 'date') input.click();
+          } else {
+            // For signature/initials, try to open the modal directly
+            const modal = document.querySelector('[data-field-signing-target="modal"]');
+            if (modal) {
+              // Store field ID in a global variable for reference
+              window.currentFieldId = fieldId;
+              
+              // Show the modal
+              modal.classList.remove('hidden');
+              
+              // Show the right content
+              const modalContents = modal.querySelectorAll('.modal-content');
+              modalContents.forEach(content => {
+                content.classList.add('hidden');
+              });
+              
+              const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
+              if (targetContent) targetContent.classList.remove('hidden');
+              
+              // Add backdrop
+              const backdrop = document.createElement('div');
+              backdrop.className = 'modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-40';
+              document.body.appendChild(backdrop);
+              
+              // Add close handler to backdrop
+              backdrop.addEventListener('click', function() {
+                modal.classList.add('hidden');
+                backdrop.remove();
+              });
+            }
+          }
+        });
+      });
+      
+      // Check for modal target
+      const modalTarget = document.querySelector('[data-field-signing-target="modal"]');
+      console.log("Modal target found:", modalTarget ? "Yes" : "No");
+    });
+  </script>
 </div>
