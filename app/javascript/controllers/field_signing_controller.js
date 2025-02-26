@@ -31,6 +31,18 @@ export default class extends Controller {
     document.addEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
     document.addEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
     
+    // Add listeners for PDF pause/resume
+    this.pdfPaused = false;
+    document.addEventListener('pdf-viewer:pause', () => {
+      console.log("PDF viewer paused");
+      this.pdfPaused = true;
+    });
+    
+    document.addEventListener('pdf-viewer:resume', () => {
+      console.log("PDF viewer resumed");
+      this.pdfPaused = false;
+    });
+    
     // Check if container target exists and log result
     if (this.hasContainerTarget) {
       console.log("Container target found:", this.containerTarget);
@@ -296,100 +308,134 @@ export default class extends Controller {
   }
   
   openSignatureModal(event) {
-    console.log("Opening signature modal for field:", event.currentTarget.dataset.fieldId);
     event.preventDefault();
+    event.stopPropagation();
     
-    // Double-check modal target on click
-    console.log("Modal target check at click time:", this.hasModalTarget ? "Found" : "MISSING");
-    if (!this.hasModalTarget) {
-      console.error("⚠️ Modal target is missing! Checking DOM directly...");
-      const directModalCheck = document.querySelector('[data-field-signing-target="modal"]');
-      console.log("Direct DOM check for modal:", directModalCheck ? "Found in DOM" : "Not found in DOM");
-      
-      if (directModalCheck) {
-        console.log("Modal found in DOM but not connected to controller. Attempting to reconnect...");
-        // This is a workaround - ideally we would fix the root cause
-        setTimeout(() => {
-          console.log("Retrying click after timeout");
-          this.openSignatureModal(event);
-        }, 500);
-        return;
-      }
-    }
+    console.log("Opening signature modal");
     
-    // Only respond to empty fields
-    const field = event.currentTarget;
-    if (field.dataset.completed === "true") {
-      console.log("Field is already completed, ignoring click");
+    const fieldElement = event.currentTarget;
+    const fieldId = fieldElement.dataset.fieldId;
+    const fieldType = fieldElement.dataset.fieldType;
+    
+    // Store the current field ID for reference
+    this.currentFieldValue = fieldId;
+    
+    // Pause PDF rendering
+    document.dispatchEvent(new CustomEvent('pdf-viewer:pause'));
+    this.pdfPaused = true;
+    
+    // Perform a direct check to see if the modal exists
+    const directModalCheck = document.getElementById('signingModal');
+    if (!directModalCheck) {
+      console.error("Modal element not found using direct query selector!");
       return;
     }
     
-    const fieldType = field.dataset.fieldType;
-    const fieldId = field.dataset.fieldId;
+    if (!this.hasModalTarget) {
+      console.error("Modal target not found!");
+      return;
+    }
     
-    console.log(`Opening modal for ${fieldType} field: ${fieldId}`);
+    console.log("Modal target found:", this.modalTarget);
     
-    this.currentFieldValue = fieldId;
+    // Show the modal
+    this.modalTarget.classList.remove('hidden');
     
-    // Show the appropriate modal
-    if (this.hasModalTarget) {
-      console.log("Modal target found, opening...");
-      
-      // Determine which part of the modal to show
-      const modalContent = this.modalTarget.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
-      if (modalContent) {
-        // Hide all content sections, show the current one
-        this.modalTarget.querySelectorAll('.modal-content').forEach(content => {
-          content.classList.add('hidden');
-        });
-        modalContent.classList.remove('hidden');
-        
-        // Show the modal
-        this.modalTarget.classList.remove('hidden');
-        
-        // Add modal backdrop
-        const backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-40';
-        document.body.appendChild(backdrop);
-        this.backdrop = backdrop;
-        
-        // If this is a signature field, initialize the signature pad
-        if (fieldType === 'signature' || fieldType === 'initials') {
-          this.initializeSignaturePad();
-        }
-        
-        // If text field, focus on the input
-        if (fieldType === 'text') {
-          setTimeout(() => {
-            const input = modalContent.querySelector('input[type="text"]');
-            if (input) input.focus();
-          }, 100);
-        }
-        
-        // If date field, initialize with current date
-        if (fieldType === 'date') {
-          const input = modalContent.querySelector('input[type="date"]');
-          if (input && !input.value) {
-            const today = new Date().toISOString().split('T')[0];
-            input.value = today;
-          }
-        }
-      } else {
-        console.warn(`Modal content for field type ${fieldType} not found`);
-      }
+    // Show corresponding content based on field type
+    const modalContents = this.modalTarget.querySelectorAll('.modal-content');
+    modalContents.forEach(content => {
+      content.classList.add('hidden');
+    });
+    
+    const targetContent = this.modalTarget.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
+    if (targetContent) {
+      targetContent.classList.remove('hidden');
     } else {
-      console.error("Modal target is missing! Cannot open modal.");
+      console.error(`Modal content for field type "${fieldType}" not found!`);
+    }
+    
+    // Show the backdrop
+    const backdrop = document.getElementById('modalBackdrop');
+    if (backdrop) {
+      backdrop.classList.remove('hidden');
+    }
+    
+    // For signature/initials, initialize the canvas
+    if (fieldType === 'signature' || fieldType === 'initials') {
+      setTimeout(() => {
+        const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+        const canvas = document.getElementById(canvasId);
+        
+        if (canvas) {
+          console.log(`Initializing ${fieldType} canvas`);
+          
+          // Clear any previous drawings
+          const context = canvas.getContext('2d');
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // Set proper dimensions
+          const ratio = Math.max(window.devicePixelRatio || 1, 2);
+          const parentWidth = canvas.parentElement.offsetWidth;
+          canvas.width = parentWidth * ratio;
+          canvas.height = canvas.offsetHeight * ratio;
+          
+          // Adjust context scale
+          context.scale(ratio, ratio);
+          context.lineWidth = 3;
+          context.lineCap = 'round';
+          context.lineJoin = 'round';
+          context.strokeStyle = '#000000';
+        }
+      }, 100);
     }
   }
   
   closeModal() {
-    if (this.hasModalTarget) {
-      this.modalTarget.classList.add('hidden')
+    console.log("Closing modal using controller method");
+    
+    // Use the safer window helper function if available
+    if (window.closeSigningModal) {
+      window.closeSigningModal();
+      return;
     }
     
-    if (this.backdrop) {
-      this.backdrop.remove()
-      this.backdrop = null
+    // Otherwise, fallback to our own implementation
+    if (this.hasModalTarget) {
+      this.modalTarget.classList.add('hidden');
+      
+      // Hide the backdrop
+      const backdrop = document.getElementById('modalBackdrop');
+      if (backdrop) {
+        backdrop.classList.add('hidden');
+      }
+      
+      // Resume PDF rendering
+      document.dispatchEvent(new CustomEvent('pdf-viewer:resume'));
+      this.pdfPaused = false;
+      
+      // Ensure body is visible and scrollable
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('display');
+      document.body.style.display = 'block';
+      
+      // Remove any full-screen overlays
+      document.querySelectorAll('.fixed.inset-0').forEach(el => {
+        if (el !== this.modalTarget && el !== backdrop) {
+          if (el.classList.contains('hidden')) return;
+          el.classList.add('hidden');
+        }
+      });
+      
+      // Force a redraw to ensure body becomes visible
+      setTimeout(() => {
+        document.body.style.opacity = 0.99;
+        setTimeout(() => document.body.style.opacity = 1, 10);
+      }, 10);
+      
+      // Reset current field value
+      this.currentFieldValue = '';
+    } else {
+      console.error("Modal target not found in closeModal");
     }
   }
   
@@ -403,19 +449,34 @@ export default class extends Controller {
   }
   
   signatureComplete(event) {
-    const signatureData = event.detail.signatureData
+    console.log("Signature complete event received", event);
     
-    if (!signatureData || !this.currentFieldValue) return
+    const signatureData = event.detail.signatureData;
     
-    // Find the corresponding field
-    const field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue)
-    if (!field) return
+    if (!signatureData || !this.currentFieldValue) {
+      console.error("Missing signature data or current field ID");
+      return;
+    }
+    
+    console.log(`Saving signature for field: ${this.currentFieldValue}`);
+    
+    // Find the corresponding field - note we need to handle both with/without the "field-" prefix
+    let field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue);
+    if (!field) {
+      field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${this.currentFieldValue}`);
+    }
+    
+    if (!field) {
+      console.error(`Field not found with ID: ${this.currentFieldValue}`);
+      return;
+    }
     
     // Update the field with the signature
-    this.updateField(this.currentFieldValue, signatureData)
+    const fieldId = this.currentFieldValue.replace(/^field-/, '');
+    this.updateField(fieldId, signatureData);
     
     // Close the modal
-    this.closeModal()
+    this.closeModal();
   }
   
   textComplete(event) {

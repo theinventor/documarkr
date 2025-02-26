@@ -12,8 +12,13 @@ export default class extends Controller {
 
   connect() {
     console.log("Signature pad controller connected");
-    this.initializeSignaturePad();
-    this.updateButtonState();
+    
+    // Ensure the canvas is visible before initializing
+    setTimeout(() => {
+      this.initializeSignaturePad();
+      this.updateButtonState();
+      console.log("Signature pad initialized with delay");
+    }, 100);
   }
   
   disconnect() {
@@ -26,6 +31,11 @@ export default class extends Controller {
     console.log("Initializing signature pad");
     
     const canvas = this.canvasTarget;
+    
+    // CRITICAL: Ensure canvas is visible and properly sized before initializing
+    canvas.style.position = "relative";
+    canvas.style.zIndex = "1002";
+    canvas.style.touchAction = "none";
     
     // Set canvas to higher resolution for better quality signatures
     const ratio = Math.max(window.devicePixelRatio || 1, 2);
@@ -46,14 +56,44 @@ export default class extends Controller {
       throttle: 16, // Increase responsiveness
     });
     
+    // Log success message for debugging
+    console.log("Signature pad created successfully");
+    
+    // Add visual feedback when drawing begins
+    canvas.addEventListener('mousedown', () => {
+      console.log("Canvas mousedown detected");
+    });
+    
+    canvas.addEventListener('touchstart', () => {
+      console.log("Canvas touchstart detected");
+    });
+    
     // Enable button when drawing begins
     this.signaturePad.addEventListener("beginStroke", () => {
+      console.log("Begin stroke event detected");
       this.updateButtonState();
     });
     
     this.signaturePad.addEventListener("endStroke", () => {
+      console.log("End stroke event detected");
       this.updateButtonState();
     });
+    
+    // Add click handler to clear button
+    if (this.hasClearButtonTarget) {
+      this.clearButtonTarget.addEventListener('click', () => {
+        console.log("Clear button clicked");
+        this.clear();
+      });
+    }
+    
+    // Add click handler to save button
+    if (this.hasSaveButtonTarget) {
+      this.saveButtonTarget.addEventListener('click', () => {
+        console.log("Save button clicked");
+        this.save();
+      });
+    }
     
     // Ensure proper size of canvas
     this.resizeCanvas();
