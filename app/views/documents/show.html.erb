@@ -29,72 +29,9 @@
       </div>
     </div>
 
-    <div 
-      data-controller="pdf-viewer" 
-      data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) if @document.file.attached? %>"
-      class="relative">
-      
-      <div class="pdf-loading">
-        <div class="flex items-center justify-center p-12">
-          <svg class="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span class="ml-3 text-gray-700">Loading document...</span>
-        </div>
-      </div>
-      
-      <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
-        <!-- PDF will be rendered here -->
-      </div>
-      
-      <!-- PDF Navigation Controls -->
-      <div class="flex items-center justify-between mt-4">
-        <button 
-          data-pdf-viewer-target="prevButton" 
-          data-action="click->pdf-viewer#prevPage"
-          class="<%= button_classes(:outline, :sm) %> flex items-center"
-          disabled>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-          Previous
-        </button>
-        
-        <span data-pdf-viewer-target="pageNum" class="text-sm text-gray-600">Page 1 of 1</span>
-        
-        <button 
-          data-pdf-viewer-target="nextButton" 
-          data-action="click->pdf-viewer#nextPage"
-          class="<%= button_classes(:outline, :sm) %> flex items-center">
-          Next
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Mobile-optimized signature field example from design system -->
-    <div class="mt-6 signature-field">
-      <label class="block text-sm font-medium text-gray-700 mb-1">Signature</label>
-      <div class="signature-box" style="touch-action: none;">
-        <!-- Canvas for signature would go here -->
-        <div class="h-24 border border-gray-300 rounded-md bg-gray-50 flex items-center justify-center">
-          <p class="text-gray-400">Tap or click to sign</p>
-        </div>
-      </div>
-      <div class="flex justify-end mt-2">
-        <button class="<%= button_classes(:outline, :sm) %> mr-2">Clear</button>
-        <button class="<%= button_classes(:primary, :sm) %>">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Document progress indicator from design system -->
-  <div class="<%= card_classes %> mt-6">
-    <h2 class="text-lg font-medium text-gray-900 mb-4">Document Progress</h2>
-    <div class="document-progress">
+    <!-- Document progress indicator - moved to top of page -->
+    <div class="document-progress mb-6">
+      <h2 class="text-lg font-medium text-gray-900 mb-4">Document Progress</h2>
       <div class="progress-steps">
         <div class="progress-step completed">
           <div class="step-indicator">
@@ -128,6 +65,79 @@
             <p class="text-xs text-gray-500">Document completed</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div 
+      data-controller="pdf-viewer" 
+      data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) if @document.file.attached? %>"
+      class="relative">
+      
+      <!-- PDF Loading Indicator -->
+      <div data-pdf-viewer-target="loading" class="pdf-loading">
+        <div class="flex items-center justify-center p-12">
+          <svg class="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="ml-3 text-gray-700">Loading document...</span>
+          <button onclick="this.closest('.pdf-loading').classList.add('hidden'); this.closest('.pdf-loading').style.display='none';" class="ml-4 px-2 py-1 bg-gray-200 rounded text-xs">Hide</button>
+        </div>
+      </div>
+      
+      <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
+        <!-- PDF will be rendered here -->
+      </div>
+      
+      <!-- PDF Navigation Controls -->
+      <div class="flex items-center justify-between mt-4">
+        <button 
+          data-pdf-viewer-target="prevButton" 
+          data-action="click->pdf-viewer#prevPage"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button"
+          disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Previous
+        </button>
+        
+        <span class="text-sm text-gray-600">Page <span data-pdf-viewer-target="pageNum">1</span> of <span data-pdf-viewer-target="pageCount">1</span></span>
+        
+        <button 
+          data-pdf-viewer-target="nextButton" 
+          data-action="click->pdf-viewer#nextPage"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button">
+          Next
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Zoom Controls -->
+      <div class="flex items-center mt-2">
+        <button 
+          data-action="click->pdf-viewer#zoomOut"
+          class="<%= button_classes(:outline, :xs) %> flex items-center"
+          title="Zoom Out">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+          </svg>
+        </button>
+        
+        <span data-pdf-viewer-target="zoomLevel" class="text-sm text-gray-600 mx-2">100%</span>
+        
+        <button 
+          data-action="click->pdf-viewer#zoomIn"
+          class="<%= button_classes(:outline, :xs) %> flex items-center"
+          title="Zoom In">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
     </div>
   </div>
@@ -208,10 +218,10 @@
           <tbody class="bg-white divide-y divide-gray-200">
             <% @document.document_signers.order(:order).each do |signer| %>
               <tr>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><%= signer.user.name %></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= signer.user.email %></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><%= signer.user&.name || signer.name || signer.email || 'Unknown' %></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= signer.user&.email || signer.email || 'No email' %></td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <span class="status-badge status-<%= signer.status %>"><%= signer.status.humanize %></span>
+                  <span class="status-badge status-<%= signer.status || 'pending' %>"><%= signer.status&.humanize || 'Pending' %></span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= signer.viewed_at&.strftime('%B %d, %Y') || 'Not yet' %></td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= signer.signed_at&.strftime('%B %d, %Y') || 'Not yet' %></td>

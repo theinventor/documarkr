@@ -56,13 +56,49 @@ class Document < ApplicationRecord
     document_signers.pending.order(:order).first&.user
   end
 
-  def log_activity(user, action, request = nil)
+  def log_activity(user, action, request = nil, additional_metadata = {})
+    metadata = { timestamp: Time.current }
+    metadata.merge!(additional_metadata) if additional_metadata.present?
+
     audit_logs.create!(
       user: user,
       action: action,
       ip_address: request&.remote_ip,
       user_agent: request&.user_agent,
-      metadata: { timestamp: Time.current }
+      metadata: metadata
     )
+  end
+
+  # Check if all signers have completed their signing
+  def all_signed?
+    document_signers.all? { |signer| signer.status == "completed" }
+  end
+
+  # Check if the document is fully processed and complete
+  def completed?
+    status == "completed" && completed_at.present?
+  end
+
+  # Generate a signing URL for a specific signer
+  def signing_url_for(signer)
+    Rails.application.routes.url_helpers.document_sign_url(
+      self,
+      token: signer.token,
+      host: Rails.application.config.action_mailer.default_url_options[:host]
+    )
+  end
+
+  # Check if the document is completed by all signers
+  def check_completion_status
+    # If all signers have completed, mark document as completed
+    if document_signers.all? { |signer| signer.completed? }
+      update(
+        status: "completed",
+        completed_at: Time.current
+      )
+
+      # Trigger any completion notifications here
+      # DocumentMailer.completion_notification(self).deliver_later
+    end
   end
 end

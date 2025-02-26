@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_02_25_193436) do
+ActiveRecord::Schema[8.0].define(version: 2025_02_26_060217) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -54,15 +54,18 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_25_193436) do
 
   create_table "document_signers", force: :cascade do |t|
     t.integer "document_id", null: false
-    t.integer "user_id", null: false
+    t.integer "user_id"
     t.integer "order", default: 0
-    t.integer "status", default: 0
+    t.integer "status", null: false
     t.datetime "viewed_at"
     t.datetime "signed_at"
     t.string "ip_address"
     t.string "user_agent"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "name"
+    t.string "email"
+    t.string "token"
     t.index ["document_id", "order"], name: "index_document_signers_on_document_id_and_order"
     t.index ["document_id"], name: "index_document_signers_on_document_id"
     t.index ["user_id"], name: "index_document_signers_on_user_id"
@@ -91,6 +94,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_25_193436) do
     t.float "height", null: false
     t.text "value"
     t.boolean "required", default: true
+    t.boolean "completed", default: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["document_id"], name: "index_form_fields_on_document_id"

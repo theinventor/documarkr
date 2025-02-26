@@ -3,6 +3,7 @@
 # Table name: form_fields
 #
 #  id                 :integer          not null, primary key
+#  completed          :boolean          default(FALSE)
 #  field_type         :string           not null
 #  height             :float            not null
 #  page_number        :integer          not null
@@ -30,20 +31,39 @@ class FormField < ApplicationRecord
   belongs_to :document
   belongs_to :document_signer
 
-  enum :field_type, {
-    signature: "signature",
-    initials: "initials",
-    text: "text",
-    date: "date"
-  }, default: "signature"
+  # Field types
+  FIELD_TYPES = %w[signature initials text date checkbox]
 
-  validates :field_type, :page_number, :x_position, :y_position, :width, :height, presence: true
+  validates :field_type, presence: true, inclusion: { in: FIELD_TYPES }
+  validates :page_number, presence: true, numericality: { greater_than: 0 }
+  validates :x_position, presence: true
+  validates :y_position, presence: true
+  validates :width, presence: true
+  validates :height, presence: true
 
-  scope :for_page, ->(page) { where(page_number: page) }
-  scope :for_signer, ->(signer) { where(document_signer_id: signer.id) }
+  # Default values
+  attribute :width, :integer, default: 150
+  attribute :height, :integer, default: 60
+  attribute :required, :boolean, default: true
+  attribute :completed, :boolean, default: false
+
+  # Field is required by default
   scope :required, -> { where(required: true) }
 
-  def completed?
-    value.present?
+  # Field completion status
+  scope :completed, -> { where(completed: true) }
+  scope :pending, -> { where(completed: false) }
+
+  # Serializes the value field for signature/initials as it stores data URLs
+  serialize :value, coder: JSON
+
+  # Determine if this field needs to be signed
+  def needs_signature?
+    field_type.in?([ "signature", "initials" ])
+  end
+
+  # Check if the field has been completed
+  def complete?
+    completed? && value.present?
   end
 end
