@@ -91,9 +91,15 @@ export default class extends Controller {
           
           // Get current scale
           const oldScale = this.currentScale;
+          let newScale;
           
-          // Calculate new scale - zoom in by 25%
-          const newScale = Math.min(oldScale * 1.25, 3.0);
+          // If we're below 100% and would cross 100% when zooming in,
+          // use exactly 100% as an intermediate step
+          if (oldScale < 1.0 && oldScale * 1.15 > 1.0) {
+            newScale = 1.0; // Exactly 100%
+          } else {
+            newScale = Math.min(oldScale * 1.15, 3.0); // 15% increment, max 300%
+          }
           
           console.log(`ZOOM FIX: Zoom IN from ${oldScale} to ${newScale}`);
           
@@ -160,9 +166,15 @@ export default class extends Controller {
           
           // Get current scale
           const oldScale = this.currentScale;
+          let newScale;
           
-          // Calculate new scale - zoom out by 20%
-          const newScale = Math.max(oldScale * 0.8, 0.5);
+          // If we're above 100% and would cross 100% when zooming out,
+          // use exactly 100% as an intermediate step
+          if (oldScale > 1.0 && oldScale * 0.85 < 1.0) {
+            newScale = 1.0; // Exactly 100%
+          } else {
+            newScale = Math.max(oldScale * 0.85, 0.5); // 15% decrement, min 50%
+          }
           
           console.log(`ZOOM FIX: Zoom OUT from ${oldScale} to ${newScale}`);
           
@@ -448,18 +460,14 @@ export default class extends Controller {
       // Get viewport at current scale
       const containerWidth = this.containerTarget.clientWidth;
       
-      // FIXED: Only calculate fit-to-width scale when:
-      // 1. We're initializing the viewer for the first time (no pages rendered yet)
-      // 2. The user hasn't manually zoomed
+      // FIXED: Now we ALWAYS initialize at 100% scale
       if (!this._initialScaleSet && !this.manualZoomMode) {
-        console.log("Initial scale calculation for fit-width");
-        const viewport = page.getViewport({ scale: 1.0 });
-        const fitScale = (containerWidth - 10) / viewport.width; // -10 for some padding
-        this.currentScale = fitScale;
-        this.scaleValue = fitScale;
+        console.log("Setting initial scale to exactly 100%");
+        this.currentScale = 1.0; // Exactly 100%
+        this.scaleValue = 1.0;
         this.updateZoomLevelDisplay();
         this._initialScaleSet = true;
-        console.log(`Set initial fit-width scale: ${fitScale}`);
+        console.log(`Set initial scale to 100%`);
       }
       
       const viewport = page.getViewport({ scale: this.currentScale });
