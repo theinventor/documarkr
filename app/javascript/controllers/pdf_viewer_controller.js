@@ -16,6 +16,9 @@ export default class extends Controller {
     this.currentScale = this.scaleValue
     this.isLoading = true
     
+    // Track whether we've calculated initial scale
+    this._initialScaleSet = false;
+    
     // Zoom tracking - add explicit last zoom direction
     this.isZooming = false;
     this.lastZoomDirection = null; // 'in' or 'out'
@@ -68,6 +71,9 @@ export default class extends Controller {
           // Set zooming flag - using a separate property from isZooming
           // to completely isolate this logic
           this._zoomingInProgress = true;
+          
+          // Mark that we've manually zoomed
+          this.manualZoomMode = true;
           
           console.log("ZOOM FIX: Zoom IN starting");
           
@@ -134,6 +140,9 @@ export default class extends Controller {
           
           // Set zooming flag
           this._zoomingInProgress = true;
+          
+          // Mark that we've manually zoomed
+          this.manualZoomMode = true;
           
           console.log("ZOOM FIX: Zoom OUT starting");
           
@@ -437,24 +446,28 @@ export default class extends Controller {
       }
       
       // Get viewport at current scale
-      const containerWidth = this.containerTarget.clientWidth
-      let scale = this.currentScale
+      const containerWidth = this.containerTarget.clientWidth;
       
-      // Adjust scale to fit width if first render
-      if (!this.pages[pageNum].rendered) {
-        const viewport = page.getViewport({ scale: 1.0 })
-        scale = (containerWidth - 10) / viewport.width // -10 for some padding
-        this.currentScale = scale
-        this.scaleValue = scale
-        this.updateZoomLevelDisplay()
+      // FIXED: Only calculate fit-to-width scale when:
+      // 1. We're initializing the viewer for the first time (no pages rendered yet)
+      // 2. The user hasn't manually zoomed
+      if (!this._initialScaleSet && !this.manualZoomMode) {
+        console.log("Initial scale calculation for fit-width");
+        const viewport = page.getViewport({ scale: 1.0 });
+        const fitScale = (containerWidth - 10) / viewport.width; // -10 for some padding
+        this.currentScale = fitScale;
+        this.scaleValue = fitScale;
+        this.updateZoomLevelDisplay();
+        this._initialScaleSet = true;
+        console.log(`Set initial fit-width scale: ${fitScale}`);
       }
       
-      const viewport = page.getViewport({ scale: this.currentScale })
+      const viewport = page.getViewport({ scale: this.currentScale });
       
       // Set canvas dimensions to match viewport
-      const context = canvas.getContext('2d')
-      canvas.height = viewport.height
-      canvas.width = viewport.width
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
       
       // Render PDF page into canvas context
       const renderContext = {
@@ -588,6 +601,12 @@ export default class extends Controller {
       }
     });
     
+    // TODO: CRITICAL ZOOM HANDLING - This event dispatch is essential for proper zoom behavior
+    // Modifying this or related scale handling code may reintroduce zoom bugs where:
+    // 1. Page navigation causes unintended zoom changes
+    // 2. Manual zoom operations aren't properly tracked
+    // 3. Fields don't scale correctly when the page is zoomed
+    // Always test thoroughly with page navigation and manual zoom when changing this code!
     document.dispatchEvent(event);
   }
   
