@@ -8,7 +8,7 @@
 #  name        :string
 #  order       :integer          default(0)
 #  signed_at   :datetime
-#  status      :integer          default("pending")
+#  status      :integer          not null
 #  token       :string
 #  user_agent  :string
 #  viewed_at   :datetime
