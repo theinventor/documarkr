@@ -20,7 +20,7 @@
       data-field-signing-document-id-value="<%= @document.id %>"
       data-field-signing-signer-id-value="<%= @document_signer.id %>"
       data-field-signing-token-value="<%= @token %>"
-      data-field-signing-complete-redirect-url-value="<%= document_complete_path(@document) %>">
+      data-field-signing-complete-redirect-url-value="<%= public_sign_complete_view_path(@document) %>">
       
       <div class="flex flex-col bg-white shadow-sm rounded-lg overflow-hidden">
         <%# PDF Viewer %>
@@ -116,4 +116,4 @@
   </main>
   
   <%= render 'signing_modal' %>
-</div> 
+</div>

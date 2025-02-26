@@ -82,10 +82,19 @@ class DocumentSigner < ApplicationRecord
 
     update(
       status: :completed,
-      completed_at: Time.current
+      signed_at: Time.current
     )
 
-    document.check_completion_status
+    # Check if there's a next signer to notify
+    next_signer = document.next_signer_after(self)
+
+    if next_signer.present?
+      # Send email to the next signer
+      DocumentMailer.signing_request(document, next_signer).deliver_later
+    else
+      # If no next signer, check if document is complete
+      document.check_completion_status
+    end
   end
 
   private

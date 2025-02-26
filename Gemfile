@@ -69,6 +69,12 @@ group :development do
 
   # Annotate models with schema info [https://github.com/drwl/annotaterb]
   gem "annotaterb"
+
+  # Preview emails in the browser instead of sending them [https://github.com/ryanb/letter_opener]
+  gem "letter_opener"
+
+  # Web interface for browsing letter_opener emails
+  gem "letter_opener_web"
 end
 
 group :test do

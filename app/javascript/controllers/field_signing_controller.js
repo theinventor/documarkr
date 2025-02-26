@@ -6,6 +6,7 @@ export default class extends Controller {
   static values = {
     documentId: Number,
     signerId: Number,
+    token: String,
     page: { type: Number, default: 1 },
     currentField: { type: String, default: "" },
     completeRedirectUrl: String
@@ -191,13 +192,13 @@ export default class extends Controller {
     // Parse out the database ID from the field ID
     const dbId = fieldId.replace('field-', '')
     
-    fetch(`/documents/${this.documentIdValue}/form_fields/${dbId}/complete`, {
+    fetch(`/sign/${this.documentIdValue}/form_fields/${dbId}/complete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
       },
-      body: JSON.stringify({ value })
+      body: JSON.stringify({ value, token: this.tokenValue })
     })
     .catch(error => console.error('Error saving field value:', error))
   }
@@ -236,27 +237,31 @@ export default class extends Controller {
   
   completeDocument() {
     // Submit all signatures
-    fetch(`/documents/${this.documentIdValue}/sign`, {
+    fetch(`/sign/${this.documentIdValue}`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-      }
+      },
+      body: JSON.stringify({ token: this.tokenValue })
     })
-    .then(response => {
-      if (response.ok) {
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
         // Show success and redirect
-        if (this.hasCompleteRedirectUrlValue) {
-          window.location.href = this.completeRedirectUrlValue
-        } else {
-          window.location.reload()
+        if (data.redirect_url) {
+          window.location.href = data.redirect_url;
+        } else if (this.hasCompleteRedirectUrlValue) {
+          window.location.href = this.completeRedirectUrlValue;
         }
       } else {
-        throw new Error('Failed to complete document signing')
+        console.error('Error completing document:', data.error);
+        alert(data.error || 'An error occurred while completing the document.');
       }
     })
     .catch(error => {
-      console.error('Error completing document:', error)
-      alert('There was an error completing your signature. Please try again.')
-    })
+      console.error('Error completing document:', error);
+      alert('An error occurred while completing the document.');
+    });
   }
 } 

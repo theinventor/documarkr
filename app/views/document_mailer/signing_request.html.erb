@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .container {
+      padding: 20px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #4f46e5;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Document Signing Request</h1>
+    </div>
+    
+    <p>Hello <%= @document_signer.name %>,</p>
+    
+    <p><strong><%= @creator.name %></strong> has sent you a document to sign: <strong><%= @document.title %></strong>.</p>
+    
+    <% if @document.message.present? %>
+      <p>Message from <%= @creator.name %>:</p>
+      <blockquote><%= @document.message %></blockquote>
+    <% end %>
+    
+    <p>Please click the button below to view and sign the document:</p>
+    
+    <div style="text-align: center;">
+      <a href="<%= @signing_url %>" class="button">View & Sign Document</a>
+    </div>
+    
+    <p>This link is unique to you and should not be shared with others.</p>
+    
+    <div class="footer">
+      <p>This is an automated message from DocuMarkr. Please do not reply to this email.</p>
+    </div>
+  </div>
+</body>
+</html> 

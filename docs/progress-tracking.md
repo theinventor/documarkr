@@ -97,3 +97,102 @@ Important notes:
 - External signers need proper nil checks in views
 - Always use safe navigation (&.) when accessing potentially nil values
 
+2-28-25
+Public Signing Controller Implementation:
+- Problem: Document signing required authentication, making it difficult for external signers
+- Solution: Created a separate unauthenticated controller for public document signing
+- Implementation details:
+  - Generated `PublicSigningController` with `bin/rails generate controller PublicSigning show sign_complete complete`
+  - Added routes for public document signing in `config/routes.rb`:
+    ```ruby
+    # Public document signing routes (no authentication required)
+    get "documents/:id/sign/:token", to: "public_signing#show", as: "public_sign_document"
+    post "documents/:id/sign", to: "public_signing#sign_complete", as: "public_sign_complete"
+    get "documents/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
+    post "documents/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+    ```
+  - Implemented controller methods with `skip_before_action :authenticate_user!`
+  - Created views for the signing process:
+    - `app/views/public_signing/show.html.erb` - Main signing interface
+    - `app/views/public_signing/_signing_modal.html.erb` - Modal for completing fields
+    - `app/views/public_signing/sign_complete.html.erb` - Processing page
+    - `app/views/public_signing/complete.html.erb` - Completion confirmation
+  - Updated `Document#signing_url_for` method to use the new controller
+  - Modified JavaScript controllers to work with the new routes
+
+Resend Signing Email Feature:
+- Problem: No way to resend signing emails if signers lost or didn't receive them
+- Solution: Added "Resend Email" button to document show page
+- Implementation details:
+  - Added route in `config/routes.rb`:
+    ```ruby
+    post :resend_signing_email, path: 'signers/:signer_id/resend'
+    ```
+  - Implemented `resend_signing_email` method in `DocumentsController`:
+    ```ruby
+    def resend_signing_email
+      @document = Document.find(params[:id])
+      @document_signer = @document.document_signers.find(params[:signer_id])
+      DocumentMailer.signing_request(@document, @document_signer).deliver_later
+      @document.log_activity(current_user, "resent_signing_email", request, {
+        signer_id: @document_signer.id,
+        signer_email: @document_signer.email,
+        signer_name: @document_signer.name
+      })
+      redirect_to document_path(@document), notice: "Signing email has been resent to #{@document_signer.name} (#{@document_signer.email})."
+    end
+    ```
+  - Added "Actions" column to signers table with resend button
+  - Button only appears for:
+    - Documents with "pending" status
+    - Signers who haven't completed signing
+    - Current signer or signers who have already viewed the document
+    - Each resend is logged in the audit trail for tracking
+
+Signing URL Fix:
+- Problem: Email links were using incorrect URL format (not using the public routes)
+- Root cause: The `signing_url_for` method was using `url_for` with controller/action instead of the named route helper
+- Solution: Updated the method to use the named route helper with proper host and port
+  ```ruby
+  # Before
+  def signing_url_for(signer)
+    Rails.application.routes.url_helpers.url_for(
+      controller: "public_signing",
+      action: "show",
+      id: self.id,
+      token: signer.token,
+      host: Rails.application.config.action_mailer.default_url_options[:host]
+    )
+  end
+  
+  # After
+  def signing_url_for(signer)
+    Rails.application.routes.url_helpers.public_sign_document_url(
+      id: self.id,
+      token: signer.token,
+      host: Rails.application.config.action_mailer.default_url_options[:host],
+      port: Rails.application.config.action_mailer.default_url_options[:port]
+    )
+  end
+  ```
+- This ensures that emails contain the correct URL format that matches our defined routes
+
+Route Pattern Improvement:
+- Problem: Public signing routes were using `/documents/:id/sign/:token` which mixed authenticated and unauthenticated paths
+- Solution: Changed public signing routes to use a clearer `/sign/...` pattern
+  ```ruby
+  # Before
+  get "documents/:id/sign/:token", to: "public_signing#show", as: "public_sign_document"
+  post "documents/:id/sign", to: "public_signing#sign_complete", as: "public_sign_complete"
+  get "documents/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
+  post "documents/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+  
+  # After
+  get "sign/:id/:token", to: "public_signing#show", as: "public_sign_document"
+  post "sign/:id", to: "public_signing#sign_complete", as: "public_sign_complete"
+  get "sign/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
+  post "sign/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+  ```
+- Updated JavaScript controllers to use the new route pattern
+- This creates a clearer separation between authenticated document routes (`/documents/...`) and public signing routes (`/sign/...`)
+
