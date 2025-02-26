@@ -53,7 +53,7 @@ class Document < ApplicationRecord
   end
 
   def current_signer
-    document_signers.pending.order(:order).first&.user
+    document_signers.pending.order("`order`").first&.user
   end
 
   def log_activity(user, action, request = nil, additional_metadata = {})
@@ -94,8 +94,8 @@ class Document < ApplicationRecord
     return nil if current_signer.nil?
 
     # Find the next signer with a higher order value
-    document_signers.where("order > ?", current_signer.order)
-                    .order(:order)
+    document_signers.where("`order` > ?", current_signer.order)
+                    .order("`order`")
                     .first
   end
 

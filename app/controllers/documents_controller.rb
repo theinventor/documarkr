@@ -173,7 +173,7 @@ class DocumentsController < ApplicationController
     end
 
     # Find the first signer (lowest order)
-    first_signer = @document.document_signers.order(:order).first
+    first_signer = @document.document_signers.order("`order`").first
 
     # Update document status to pending
     @document.update(status: :pending)

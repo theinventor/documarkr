@@ -103,7 +103,7 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
+              <% @document.document_signers.order("`order`").each_with_index do |signer, index| %>
                 <tr>
                   <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     <div class="flex items-center">
@@ -191,7 +191,7 @@
             
             <!-- Signer color legend -->
             <div class="mb-2 flex flex-col space-y-1">
-              <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
+              <% @document.document_signers.order("`order`").each_with_index do |signer, index| %>
                 <div class="flex items-center">
                   <div class="w-4 h-4 rounded-full signer-color-<%= index + 1 %>"></div>
                   <span class="ml-2 text-xs text-gray-600">
@@ -210,7 +210,7 @@
               data-action="change->editor-field-placement#signerSelectChanged"
               class="block w-full pl-3 pr-10 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md">
               <option value="">Select a signer</option>
-              <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
+              <% @document.document_signers.order("`order`").each_with_index do |signer, index| %>
                 <option value="<%= signer.id %>" class="signer-option-<%= index + 1 %>">
                   <% if signer.user.present? %>
                     <%= signer.user.name || signer.user.email %>

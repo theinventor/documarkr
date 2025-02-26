@@ -22,38 +22,38 @@
       data-field-signing-token-value="<%= @token %>"
       data-field-signing-complete-redirect-url-value="<%= public_sign_complete_view_path(@document) %>">
       
-      <!-- Field status sidebar -->
-      <div class="w-full md:w-64 lg:w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div class="p-4 border-b border-gray-200">
-          <h2 class="text-lg font-bold text-gray-800">Document Fields</h2>
-          <div class="mt-2">
-            <div class="text-sm text-gray-600">
+      <!-- Field status sidebar - REDUCED WIDTH AND TEXT SIZE -->
+      <div class="w-full md:w-40 lg:w-48 bg-white border-r border-gray-200 flex flex-col">
+        <div class="p-3 border-b border-gray-200">
+          <h2 class="text-base font-bold text-gray-800">Document Fields</h2>
+          <div class="mt-1">
+            <div class="text-xs text-gray-600">
               Progress: <span data-field-signing-target="completedCount">0</span>/<span data-field-signing-target="totalCount">0</span> completed
             </div>
-            <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
-              <div data-field-signing-target="progressBar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+            <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+              <div data-field-signing-target="progressBar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
             </div>
           </div>
         </div>
         
-        <div class="overflow-y-auto flex-grow p-2" data-field-signing-target="fieldsList">
+        <div class="overflow-y-auto flex-grow p-1" data-field-signing-target="fieldsList">
           <% @form_fields.each_with_index do |field, index| %>
-            <div class="field-status-item p-2 border-b border-gray-100 hover:bg-gray-50 cursor-pointer flex items-center"
+            <div class="field-status-item p-1 border-b border-gray-100 hover:bg-gray-50 cursor-pointer flex items-center"
                  data-field-id="field-<%= field.id %>"
                  data-field-status="pending"
                  data-action="click->field-signing#scrollToField">
-              <div class="field-status w-4 h-4 rounded-full bg-gray-300 mr-2"></div>
+              <div class="field-status w-3 h-3 rounded-full bg-gray-300 mr-1"></div>
               <div class="flex-grow">
-                <div class="text-sm font-medium"><%= field.field_type.humanize %> Field</div>
+                <div class="text-xs font-medium"><%= field.field_type.humanize %></div>
                 <div class="text-xs text-gray-500">Page <%= field.page_number %></div>
               </div>
             </div>
           <% end %>
         </div>
         
-        <div class="p-4 border-t border-gray-200">
+        <div class="p-2 border-t border-gray-200">
           <button id="document-submit-button" 
-                  class="w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed"
+                  class="w-full px-3 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg shadow opacity-50 cursor-not-allowed"
                   form="sign-form" 
                   type="submit"
                   disabled>
@@ -179,47 +179,51 @@
         </div>
       </div>
       
-      <%# Signing Instructions %>
-      <div class="bg-white p-4 rounded-lg shadow-sm mt-4">
-        <h3 class="text-lg font-medium text-gray-900">Signing Instructions</h3>
-        <ul class="mt-2 text-sm text-gray-600 space-y-2">
-          <li class="flex items-start">
-            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <span><strong>Text Fields:</strong> Click on any text field to type directly, then click Save.</span>
-          </li>
-          <li class="flex items-start">
-            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <span><strong>Date Fields:</strong> Click on any date field to open a date picker, then click Save.</span>
-          </li>
-          <li class="flex items-start">
-            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <span><strong>Signature/Initials:</strong> Click to draw your signature or initials using our signature pad.</span>
-          </li>
-          <li class="flex items-start">
-            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <span><strong>Field List:</strong> Use the sidebar on the left to track your progress.</span>
-          </li>
-          <li class="flex items-start">
-            <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
-            <span><strong>Submit:</strong> Once all required fields are completed, the submit button will be enabled.</span>
-          </li>
-        </ul>
-      </div>
-      
       <%# Signing Modal - MOVED INSIDE the controller div %>
       <%= render 'signing_modal' %>
     </div>
   </main>
+
+  <!-- Signing Instructions - MOVED TO BOTTOM OF PAGE WITH SMALLER FOOTPRINT -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 mb-4">
+    <details class="bg-white p-3 rounded-lg shadow-sm">
+      <summary class="text-md font-medium text-gray-900 cursor-pointer hover:text-blue-600">
+        Signing Instructions (click to expand)
+      </summary>
+      <div class="mt-2 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+        <div class="flex items-start">
+          <svg class="h-4 w-4 text-blue-500 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          <span><strong>Text Fields:</strong> Click to type, then Save.</span>
+        </div>
+        <div class="flex items-start">
+          <svg class="h-4 w-4 text-blue-500 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          <span><strong>Date Fields:</strong> Click to select, then Save.</span>
+        </div>
+        <div class="flex items-start">
+          <svg class="h-4 w-4 text-blue-500 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          <span><strong>Signature/Initials:</strong> Click to draw.</span>
+        </div>
+        <div class="flex items-start">
+          <svg class="h-4 w-4 text-blue-500 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          <span><strong>Field List:</strong> Shows your progress.</span>
+        </div>
+        <div class="flex items-start">
+          <svg class="h-4 w-4 text-blue-500 mr-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+          <span><strong>Submit:</strong> Enabled when all fields complete.</span>
+        </div>
+      </div>
+    </details>
+  </div>
 
   <%# Add metadata for CSRF protection %>
   <%= csrf_meta_tags %>
@@ -306,7 +310,7 @@
 </div>
 
 <!-- Hidden form for submission -->
-<%= form_with url: public_sign_path(id: @document.id), method: :post, id: "sign-form", class: "hidden" do |f| %>
+<%= form_with url: public_sign_complete_path(id: @document.id), method: :post, id: "sign-form", class: "hidden" do |f| %>
   <%= f.hidden_field :token, value: @token %>
 <% end %>
 
@@ -431,7 +435,7 @@ document.addEventListener('DOMContentLoaded', function() {
   debugInfo.className = 'debug-info';
   debugInfo.innerHTML = '<h4>Debug Info:</h4>';
   debugInfo.innerHTML += `<p>Document ID: <%= @document.id %></p>`;
-  debugInfo.innerHTML += `<p>Signer ID: <%= @signer.id %></p>`;
+  debugInfo.innerHTML += `<p>Signer ID: <%= @document_signer.id %></p>`;
   debugInfo.innerHTML += `<p>Field Count: <%= @form_fields.count %></p>`;
   document.body.appendChild(debugInfo);
   
