@@ -469,10 +469,19 @@ export default class extends Controller {
       pagesContainer.style.display = 'flex';
       pagesContainer.style.flexDirection = 'column';
       pagesContainer.style.gap = '20px'; // Add space between pages
+      pagesContainer.style.zIndex = '1'; // Lower z-index than field elements
+      
+      // Save any existing fields before clearing the container
+      const existingFields = Array.from(this.containerTarget.querySelectorAll('.signature-field'));
       
       // Clear the container first
       this.containerTarget.innerHTML = '';
       this.containerTarget.appendChild(pagesContainer);
+      
+      // Re-add the fields if there were any
+      existingFields.forEach(field => {
+        this.containerTarget.appendChild(field);
+      });
     }
     
     // Early check: if pagesContainer already has page containers, clear them out
@@ -839,5 +848,45 @@ export default class extends Controller {
     
     // Update navigation buttons properly
     this.updateNavigationButtons();
+  }
+
+  // Trigger page changed event
+  triggerPageChangedEvent() {
+    if (!this.pdfDoc) return;
+    
+    // Get the current scale
+    const scale = this.currentScale || 1;
+    
+    // Check if all pages are rendered
+    const allPagesVisible = this.pdfDoc && this.pages.filter(p => p !== null).length === this.pdfDoc.numPages + 1;
+    
+    const detail = {
+      page: this.currentPage,
+      pageCount: this.pdfDoc.numPages,
+      allPagesVisible: allPagesVisible,
+      scale: scale
+    };
+    
+    console.log('Triggering page changed event with details:', detail);
+    
+    // Create and dispatch the event
+    const event = new CustomEvent('pdf-viewer:pageChanged', {
+      detail: detail,
+      bubbles: true
+    });
+    
+    // Dispatch with a small delay to ensure all rendering has completed
+    setTimeout(() => {
+      this.element.dispatchEvent(event);
+      
+      // Fire an additional event after a short delay to ensure field visibility
+      setTimeout(() => {
+        const additionalEvent = new CustomEvent('pdf-viewer:fieldsCheck', {
+          detail: { ...detail, check: 'visibility' },
+          bubbles: true
+        });
+        this.element.dispatchEvent(additionalEvent);
+      }, 300);
+    }, 50);
   }
 } 

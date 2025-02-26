@@ -56,6 +56,12 @@ export default class EditorFieldPlacementController extends Controller {
     
     // Listen for PDF page changes
     this.listenForPdfPageChanges()
+
+    // Listen for page change events from the PDF viewer
+    document.addEventListener('pdf-viewer:pageChanged', this.handlePdfPageChange.bind(this));
+    
+    // Listen for the fields visibility check event
+    document.addEventListener('pdf-viewer:fieldsCheck', this.verifyFieldsVisibility.bind(this));
   }
   
   // New method to check if targets are properly connected
@@ -434,92 +440,95 @@ export default class EditorFieldPlacementController extends Controller {
   }
 
   handleMouseUp(event) {
-    // Handle resize operation end if active
-    if (this.isResizing && this.activeFieldElement) {
-      this.handleResizeEnd(event);
-      return;
-    }
-
-    if (!this.activeFieldElement || !this.selectedFieldType || !this.signerIdValue) {
-      return
-    }
+    // Only process mouse up if we're in placement mode
+    if (!this.isPlacingField || !this.hasContainerTarget) return;
     
-    // Get final dimensions
-    const width = parseFloat(this.activeFieldElement.style.width)
-    const height = parseFloat(this.activeFieldElement.style.height)
+    // Handle field placement finalization here
+    this.isPlacingField = false;
     
-    // Convert pixel dimensions to percentages
-    let widthPercent, heightPercent;
-    
-    if (this.activeFieldElement.style.width.endsWith('px')) {
-      widthPercent = (width / this.containerRect.width) * 100;
-      heightPercent = (height / this.containerRect.height) * 100;
+    // Convert selection area to field placement data
+    if (this.selectionStartX !== null && this.selectionStartY !== null) {
+      // Get current container dimensions
+      const containerRect = this.containerTarget.getBoundingClientRect();
       
-      // Update element to use percentage-based dimensions
-      this.activeFieldElement.style.width = `${widthPercent}%`;
-      this.activeFieldElement.style.height = `${heightPercent}%`;
-    } else {
-      // If already in percentages, extract the values
-      widthPercent = parseFloat(this.activeFieldElement.style.width);
-      heightPercent = parseFloat(this.activeFieldElement.style.height);
-    }
-    
-    // Get position (should already be in percentages)
-    let xPercent, yPercent;
-    
-    if (this.activeFieldElement.style.left.endsWith('px')) {
-      const fieldLeft = parseFloat(this.activeFieldElement.style.left);
-      const fieldTop = parseFloat(this.activeFieldElement.style.top);
-      xPercent = (fieldLeft / this.containerRect.width) * 100;
-      yPercent = (fieldTop / this.containerRect.height) * 100;
+      // Adjust selection to be contained within the container
+      let selectionX = Math.max(0, Math.min(this.selectionEndX, containerRect.width));
+      let selectionY = Math.max(0, Math.min(this.selectionEndY, containerRect.height));
       
-      // Update element to use percentage-based positioning
-      this.activeFieldElement.style.left = `${xPercent}%`;
-      this.activeFieldElement.style.top = `${yPercent}%`;
-    } else {
-      // If already in percentages, extract the values
-      xPercent = parseFloat(this.activeFieldElement.style.left);
-      yPercent = parseFloat(this.activeFieldElement.style.top);
+      // Calculate dimensions
+      const width = Math.abs(selectionX - this.selectionStartX);
+      const height = Math.abs(selectionY - this.selectionStartY);
+      
+      // Normalize selection coordinates (top-left is always the start point)
+      const startX = Math.min(this.selectionStartX, selectionX);
+      const startY = Math.min(this.selectionStartY, selectionY);
+      
+      // Check if the selected area is too small - reject if smaller than minimum dimensions
+      // This prevents accidental tiny fields from being created
+      const MIN_WIDTH = 50;  // Minimum width in pixels
+      const MIN_HEIGHT = 30; // Minimum height in pixels
+      
+      if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+        console.log("Selection area too small, ignoring field placement");
+        this.removeSelectionBox();
+        this.resetSelectionState();
+        return;
+      }
+      
+      // Convert pixel positions to percentages for storage
+      const xPercent = (startX / containerRect.width) * 100;
+      const yPercent = (startY / containerRect.height) * 100;
+      const widthPercent = (width / containerRect.width) * 100;
+      const heightPercent = (height / containerRect.height) * 100;
+      
+      // Create field object with field data
+      const fieldData = {
+        field_type: this.selectedFieldType,
+        document_id: this.documentIdValue,
+        document_signer_id: this.signerIdValue,
+        page_number: this.currentPage,
+        x_position: xPercent,
+        y_position: yPercent,
+        width: widthPercent,
+        height: heightPercent,
+        required: false
+      };
+      
+      // Add the field
+      this.saveField(fieldData);
+      
+      // Add field to the local fields array for tracking
+      // Note: No element reference yet since it will be created by the server response
+      const field = {
+        field_type: this.selectedFieldType,
+        document_id: this.documentIdValue,
+        document_signer_id: this.signerIdValue,
+        page_number: this.currentPage,
+        x_position: xPercent,
+        y_position: yPercent,
+        width: widthPercent,
+        height: heightPercent,
+        required: false,
+        element: null // Will be populated when server responds
+      };
+      
+      // Remove the temporary selection box
+      this.removeSelectionBox();
     }
     
-    // Create a unique field ID
-    const fieldId = `field-${Date.now()}`
+    // Reset state for next selection
+    this.resetSelectionState();
     
-    // Create field data object
-    const fieldData = {
-      id: fieldId,
-      field_type: this.selectedFieldType,
-      document_id: this.documentIdValue,
-      document_signer_id: this.signerIdValue,
-      page_number: this.currentPage,
-      x_position: xPercent,
-      y_position: yPercent,
-      width: widthPercent,
-      height: heightPercent,
-      required: true,
-      element: this.activeFieldElement
+    // Restore the default cursor
+    if (this.hasContainerTarget) {
+      this.containerTarget.style.cursor = 'default';
     }
     
-    // Update the element's ID
-    this.activeFieldElement.id = fieldId
-    
-    // Add the field to our list of fields
-    this.fields.push(fieldData)
-    
-    // Add the field to the fields list in the UI
-    this.addFieldToList(fieldId, fieldData)
-    
-    // Save the field to the server
-    this.saveField(fieldData, fieldId)
-    
-    // Reset active element
-    this.activeFieldElement = null
-    
-    // Reset selection
-    this.cancelFieldSelection()
-    
-    // Prevent default
-    event.preventDefault()
+    // If we're in auto-reset mode, reset field selection after placement
+    if (this.autoResetAfterPlacement) {
+      this.selectedFieldType = null;
+      this.resetToolbarButtonsState();
+    }
   }
 
   handleKeyDown(event) {
@@ -634,9 +643,19 @@ export default class EditorFieldPlacementController extends Controller {
     // First, hide/show fields based on the current page
     this.fields.forEach(field => {
       if (field.element) {
-        if (parseInt(field.pageNumber) === parseInt(this.currentPage)) {
+        const fieldPage = parseInt(field.page_number);
+        const currentPage = parseInt(this.currentPage);
+        
+        console.log(`Field ${field.serverId}: page ${fieldPage}, current page ${currentPage}`);
+        
+        if (fieldPage === currentPage) {
           // Show fields for the current page
           field.element.style.display = 'block';
+          field.element.style.visibility = 'visible'; // Explicitly set visibility
+          field.element.style.opacity = '1'; // Ensure opacity is set to fully visible
+          field.element.style.zIndex = '100'; // Keep fields on top
+          
+          console.log(`Making field ${field.serverId} visible`);
         } else {
           // Hide fields for other pages
           field.element.style.display = 'none';
@@ -659,7 +678,7 @@ export default class EditorFieldPlacementController extends Controller {
     
     // Check if we've already loaded fields for this page
     const hasFieldsForCurrentPage = this.fields.some(field => 
-      parseInt(field.pageNumber) === parseInt(this.currentPage)
+      parseInt(field.page_number) === parseInt(this.currentPage)
     );
     
     // Only fetch from server if we haven't loaded fields for this page yet
@@ -683,6 +702,11 @@ export default class EditorFieldPlacementController extends Controller {
               console.log(`Applying current scale ${this.lastKnownPdfScale} to newly loaded fields`);
               this.updateFieldsForZoomChange(this.lastKnownPdfScale);
             }
+            
+            // Add a small delay to check if fields are still visible
+            setTimeout(() => {
+              this.verifyFieldsVisibility();
+            }, 500);
           }
         })
         .catch(error => {
@@ -690,6 +714,11 @@ export default class EditorFieldPlacementController extends Controller {
         });
     } else {
       console.log(`Using existing fields for page ${this.currentPage}`);
+      
+      // Verify fields are visible even for existing fields
+      setTimeout(() => {
+        this.verifyFieldsVisibility();
+      }, 300);
     }
   }
 
@@ -728,8 +757,8 @@ export default class EditorFieldPlacementController extends Controller {
     fieldElement.style.width = `${widthPercent}%`;
     fieldElement.style.height = `${heightPercent}%`;
     
-    // Set visibility based on current page
-    if (fieldData.page_number === this.currentPage) {
+    // Set visibility based on current page - make sure fields are visible
+    if (parseInt(fieldData.page_number) === this.currentPage) {
       fieldElement.style.display = 'block';
     } else {
       fieldElement.style.display = 'none';
@@ -741,45 +770,56 @@ export default class EditorFieldPlacementController extends Controller {
       fieldElement.style.transformOrigin = 'top left';
     }
     
-    // Create a field label element
-    const labelElement = document.createElement('div');
-    labelElement.className = 'field-label';
-    
-    // Add appropriate icon for the field type
-    let fieldIcon = ''
-    switch (fieldData.field_type) {
-      case 'signature':
-        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>'
-        break
-      case 'initials':
-        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>'
-        break
-      case 'text':
-        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-        break
-      case 'date':
-        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
-        break
-      default:
-        fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>'
+    // Make sure fields stay on top of the PDF content
+    fieldElement.style.zIndex = '100';
+
+    // Make sure we add the element to the correct container
+    if (this.hasContainerTarget) {
+      // Create a field label element
+      const labelElement = document.createElement('div');
+      labelElement.className = 'field-label';
+      
+      // Add appropriate icon for the field type
+      let fieldIcon = ''
+      switch (fieldData.field_type) {
+        case 'signature':
+          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>'
+          break
+        case 'initials':
+          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>'
+          break
+        case 'text':
+          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+          break
+        case 'date':
+          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
+          break
+        default:
+          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>'
+      }
+      
+      labelElement.innerHTML = fieldIcon
+      fieldElement.appendChild(labelElement)
+      
+      // Add trash icon for deleting the field
+      const deleteButton = document.createElement('div')
+      deleteButton.className = 'field-delete-button'
+      deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
+      deleteButton.dataset.action = 'click->editor-field-placement#deleteFieldFromPdf'
+      deleteButton.dataset.fieldId = fieldData.id
+      fieldElement.appendChild(deleteButton)
+      
+      // Add resize handles
+      this.addResizeHandles(fieldElement)
+      
+      // Add the field element to the container
+      this.containerTarget.appendChild(fieldElement)
+      
+      // Log that we've added the field to the container
+      console.log(`Added field to container: ${fieldData.field_type} (ID: ${fieldData.id}) - Visibility: ${fieldElement.style.display}`);
+    } else {
+      console.error("Container target not found, cannot add field to DOM");
     }
-    
-    labelElement.innerHTML = fieldIcon
-    fieldElement.appendChild(labelElement)
-    
-    // Add trash icon for deleting the field
-    const deleteButton = document.createElement('div')
-    deleteButton.className = 'field-delete-button'
-    deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
-    deleteButton.dataset.action = 'click->field-placement#deleteFieldFromPdf'
-    deleteButton.dataset.fieldId = fieldData.id
-    fieldElement.appendChild(deleteButton)
-    
-    // Add resize handles
-    this.addResizeHandles(fieldElement)
-    
-    // Add the field element to the container
-    this.containerTarget.appendChild(fieldElement)
     
     // Add to fields array with complete data
     const fieldObj = {
@@ -787,7 +827,7 @@ export default class EditorFieldPlacementController extends Controller {
       field_type: fieldData.field_type,
       document_id: this.documentIdValue,
       document_signer_id: fieldData.document_signer_id,
-      page_number: fieldData.page_number,
+      page_number: parseInt(fieldData.page_number),
       x_position: xPercent,
       y_position: yPercent,
       width: widthPercent,
@@ -1125,17 +1165,21 @@ export default class EditorFieldPlacementController extends Controller {
         field.element.parentNode.removeChild(field.element)
       }
       
+      // Remove the field from our fields array
+      this.fields.splice(fieldIndex, 1)
+      
       // Delete it from the server
       this.deleteFieldFromServer(fieldId)
       
-      // Remove the field from our array
-      this.fields.splice(fieldIndex, 1)
-      
-      // Remove the list item from the fields list
-      const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${fieldId}"]`)
-      if (listItem) {
-        listItem.parentNode.removeChild(listItem)
+      // Also remove it from the UI fields list
+      if (this.hasFieldsListTarget) {
+        const listItem = this.fieldsListTarget.querySelector(`li[data-field-id="${fieldId}"]`)
+        if (listItem) {
+          listItem.remove()
+        }
       }
+      
+      console.log(`Field ${fieldId} successfully removed`)
     } else {
       console.error(`Could not find field with server ID ${fieldId} in fields array`)
     }
@@ -1160,7 +1204,7 @@ export default class EditorFieldPlacementController extends Controller {
   // Update method to update field positions when zoom changes
   updateFieldsForZoomChange(newScale) {
     // Only update fields on the current page
-    const currentPageFields = this.fields.filter(field => field.pageNumber === this.currentPage);
+    const currentPageFields = this.fields.filter(field => field.page_number === this.currentPage);
     
     console.log(`Updating ${currentPageFields.length} fields for zoom scale: ${newScale}`);
     
@@ -1199,7 +1243,9 @@ export default class EditorFieldPlacementController extends Controller {
       console.log('PDF page change detected:', event.detail);
       const newPage = event.detail.page;
       
-      if (newPage !== this.currentPage) {
+      // Important: Only respond if the page actually changes
+      // This prevents multiple redraws on the same page
+      if (newPage && newPage !== this.currentPage) {
         console.log(`Changing page: ${this.currentPage} -> ${newPage}`);
         this.currentPage = newPage;
         
@@ -1284,6 +1330,55 @@ export default class EditorFieldPlacementController extends Controller {
       this.signerSelectTarget.parentNode.insertBefore(colorIndicator, this.signerSelectTarget);
       
       console.log(`Added color indicator for signer index ${selectedIndex}`);
+    }
+  }
+
+  // Add a new method to verify and ensure fields remain visible
+  verifyFieldsVisibility(event) {
+    console.log('Verifying field visibility');
+    const currentPage = event.detail.page;
+    const fields = this.element.querySelectorAll(`.signature-field[data-page="${currentPage}"]`);
+    
+    if (fields.length === 0) {
+      console.log('No fields found for page', currentPage);
+      return;
+    }
+    
+    console.log(`Found ${fields.length} fields for page ${currentPage}, ensuring visibility`);
+    
+    fields.forEach(field => {
+      // Ensure the field is visible and properly styled
+      field.style.display = 'block';
+      field.style.opacity = '1';
+      field.style.visibility = 'visible';
+      field.style.zIndex = '100';
+      
+      // Ensure field has proper pointer events
+      field.style.pointerEvents = 'auto';
+      
+      // Log field dimensions and position for debugging
+      const rect = field.getBoundingClientRect();
+      console.log(`Field ${field.id || 'unknown'}: `, {
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        left: rect.left,
+        visible: field.offsetParent !== null
+      });
+    });
+  }
+
+  // Add method to handle page change events from the PDF viewer
+  handlePdfPageChange(event) {
+    console.log('PDF page change detected:', event.detail);
+    const newPage = event.detail.page;
+    
+    if (newPage && newPage !== this.currentPage) {
+      console.log(`Changing page: ${this.currentPage} -> ${newPage}`);
+      this.currentPage = newPage;
+      
+      // Load fields for the new page
+      this.loadFieldsForCurrentPage();
     }
   }
 }

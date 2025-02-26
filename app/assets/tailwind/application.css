@@ -86,6 +86,7 @@
 .pdf-container {
   min-height: 400px;
   position: relative;
+  z-index: 1; /* Create stacking context for child elements */
 }
 
 .pdf-loading {
@@ -149,6 +150,8 @@
   transition: background-color 0.2s, border-color 0.2s, transform 0.1s;
   transform-origin: top left;
   will-change: transform;
+  z-index: 100 !important;
+  pointer-events: auto !important;
 }
 
 /* Add a class for scaled fields */
