@@ -103,10 +103,13 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <% @document.document_signers.order(:order).each do |signer| %>
+              <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
                 <tr>
                   <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <%= signer.name || "Not specified" %>
+                    <div class="flex items-center">
+                      <div class="w-4 h-4 rounded-full mr-2 signer-color-<%= index + 1 %>"></div>
+                      <%= signer.name || "Not specified" %>
+                    </div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <%= signer.email %>
@@ -171,7 +174,7 @@
             <div class="mb-2 flex flex-col space-y-1">
               <% @document.document_signers.order(:order).each_with_index do |signer, index| %>
                 <div class="flex items-center">
-                  <div class="w-4 h-4 rounded-full signer-<%= index + 1 %> border" style="background-color: <%= index == 0 ? 'rgba(99, 102, 241, 0.3)' : index == 1 ? 'rgba(239, 68, 68, 0.3)' : index == 2 ? 'rgba(16, 185, 129, 0.3)' : index == 3 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(139, 92, 246, 0.3)' %>"></div>
+                  <div class="w-4 h-4 rounded-full signer-color-<%= index + 1 %>"></div>
                   <span class="ml-2 text-xs text-gray-600">
                     <% if signer.user.present? %>
                       <%= signer.user.name || signer.user.email %>
