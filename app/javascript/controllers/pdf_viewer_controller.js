@@ -16,6 +16,189 @@ export default class extends Controller {
     this.currentScale = this.scaleValue
     this.isLoading = true
     
+    // Zoom tracking - add explicit last zoom direction
+    this.isZooming = false;
+    this.lastZoomDirection = null; // 'in' or 'out'
+    this.manualZoomMode = false; // Set to true after first manual zoom
+    
+    // Debug for zoom buttons
+    setTimeout(() => {
+      console.log("=== ZOOM FIX: Looking for zoom buttons ===");
+      const zoomInBtn = document.getElementById('zoomInButton');
+      const zoomOutBtn = document.getElementById('zoomOutButton');
+      
+      // Track whether we've already attached zoom handlers
+      // to prevent multiple handlers being attached
+      this._zoomHandlersAttached = false;
+      
+      if (zoomInBtn && zoomOutBtn && !this._zoomHandlersAttached) {
+        console.log("ZOOM FIX: Found zoom buttons and attaching handlers");
+        this._zoomHandlersAttached = true;
+        
+        // Store direct reference to the zoom level display element
+        this._zoomLevelElement = this.hasZoomLevelTarget ? this.zoomLevelTarget : null;
+        
+        // Completely remove and recreate BOTH buttons to ensure no old handlers exist
+        const zoomInParent = zoomInBtn.parentNode;
+        const zoomOutParent = zoomOutBtn.parentNode;
+        
+        // Clone the buttons
+        const newZoomInBtn = zoomInBtn.cloneNode(true);
+        const newZoomOutBtn = zoomOutBtn.cloneNode(true);
+        
+        // Remove old buttons
+        zoomInBtn.remove();
+        zoomOutBtn.remove();
+        
+        // Add new buttons
+        zoomInParent.appendChild(newZoomInBtn);
+        zoomOutParent.appendChild(newZoomOutBtn);
+        
+        // === ZOOM IN BUTTON ===
+        newZoomInBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Prevent zoom if already zooming
+          if (this._zoomingInProgress) {
+            console.log("Zoom operation already in progress, ignoring click");
+            return;
+          }
+          
+          // Set zooming flag - using a separate property from isZooming
+          // to completely isolate this logic
+          this._zoomingInProgress = true;
+          
+          console.log("ZOOM FIX: Zoom IN starting");
+          
+          // Get current scale
+          const oldScale = this.currentScale;
+          
+          // Calculate new scale - zoom in by 25%
+          const newScale = Math.min(oldScale * 1.25, 3.0);
+          
+          console.log(`ZOOM FIX: Zoom IN from ${oldScale} to ${newScale}`);
+          
+          // Update internal scale without using scaleValue
+          this.currentScale = newScale;
+          
+          // Manually update zoom display if we have reference to it
+          if (this._zoomLevelElement) {
+            const percentage = Math.round(newScale * 100);
+            this._zoomLevelElement.textContent = `${percentage}%`;
+            console.log("ZOOM DISPLAY updated manually to:", percentage + "%");
+          }
+          
+          // IMPORTANT: Manually re-render the current page
+          // We can't use reRenderCurrentPage because it might trigger value changes
+          this._manualRenderWithNewScale(newScale);
+          
+          // Release zoom lock after a delay
+          setTimeout(() => {
+            this._zoomingInProgress = false;
+            
+            // Sync scale value at the end to maintain consistency
+            // but only after zooming is complete
+            this.scaleValue = newScale;
+            
+            console.log("Zoom IN operation complete");
+          }, 300);
+        });
+        
+        // === ZOOM OUT BUTTON ===
+        newZoomOutBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Prevent zoom if already zooming
+          if (this._zoomingInProgress) {
+            console.log("Zoom operation already in progress, ignoring click");
+            return;
+          }
+          
+          // Set zooming flag
+          this._zoomingInProgress = true;
+          
+          console.log("ZOOM FIX: Zoom OUT starting");
+          
+          // Get current scale
+          const oldScale = this.currentScale;
+          
+          // Calculate new scale - zoom out by 20%
+          const newScale = Math.max(oldScale * 0.8, 0.5);
+          
+          console.log(`ZOOM FIX: Zoom OUT from ${oldScale} to ${newScale}`);
+          
+          // Update internal scale without using scaleValue
+          this.currentScale = newScale;
+          
+          // Manually update zoom display if we have reference to it
+          if (this._zoomLevelElement) {
+            const percentage = Math.round(newScale * 100);
+            this._zoomLevelElement.textContent = `${percentage}%`;
+            console.log("ZOOM DISPLAY updated manually to:", percentage + "%");
+          }
+          
+          // IMPORTANT: Manually re-render the current page
+          this._manualRenderWithNewScale(newScale);
+          
+          // Release zoom lock after a delay
+          setTimeout(() => {
+            this._zoomingInProgress = false;
+            
+            // Sync scale value at the end to maintain consistency
+            this.scaleValue = newScale;
+            
+            console.log("Zoom OUT operation complete");
+          }, 300);
+        });
+        
+        // Add a manual render method that doesn't trigger value changes
+        this._manualRenderWithNewScale = async (scale) => {
+          console.log(`Manual render at scale: ${scale}`);
+          
+          if (!this.pdfDoc || !this.pages[this.currentPage]) {
+            console.warn("Cannot render: PDF not loaded or current page not initialized");
+            return;
+          }
+          
+          try {
+            // Get the current page
+            const pageObj = this.pages[this.currentPage];
+            const canvas = pageObj.canvas;
+            const page = await this.pdfDoc.getPage(this.currentPage);
+            
+            // Get the viewport with the new scale
+            const viewport = page.getViewport({ scale: scale });
+            
+            // Update canvas dimensions
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            // Render to canvas
+            const renderContext = {
+              canvasContext: canvas.getContext('2d'),
+              viewport: viewport
+            };
+            
+            await page.render(renderContext).promise;
+            console.log("Manual render complete");
+            
+          } catch (error) {
+            console.error("Error in manual render:", error);
+          }
+        };
+      }
+    }, 1000);
+    
+    // Create a helper method to re-render the current page
+    this.reRenderCurrentPage = () => {
+      if (this.pages[this.currentPage]) {
+        this.pages[this.currentPage].rendered = false;
+        this.renderPage(this.currentPage);
+      }
+    };
+    
     // Check if loading target exists during connection
     if (this.hasLoadingTarget) {
       console.log("Loading target found:", this.loadingTarget);
@@ -142,6 +325,7 @@ export default class extends Controller {
     }
     
     console.log(`Rendering page ${pageNum}, current loading state:`, this.isLoading);
+    console.log(`Current scale before render: ${this.currentScale}, isZooming: ${this.isZooming}`);
     // Another check for the loading indicator visibility
     if (this.hasLoadingTarget) {
       console.log(`Loading indicator visibility before render: display=${this.loadingTarget.style.display}, class=${this.loadingTarget.className}`);
@@ -292,48 +476,16 @@ export default class extends Controller {
     }
   }
   
-  zoomIn(event) {
-    // Prevent default behavior and stop propagation to avoid scrolling
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    
-    this.currentScale = Math.min(this.currentScale * 1.25, 3.0) // Max 300%
-    this.scaleValue = this.currentScale
-    this.updateZoomLevelDisplay()
-    
-    // Re-render current page with new scale
-    this.pages[this.currentPage].rendered = false
-    this.renderPage(this.currentPage)
-    
-    // Return false to ensure the browser doesn't follow the href
-    return false;
-  }
-  
-  zoomOut(event) {
-    // Prevent default behavior and stop propagation to avoid scrolling
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    
-    this.currentScale = Math.max(this.currentScale * 0.8, 0.5) // Min 50%
-    this.scaleValue = this.currentScale
-    this.updateZoomLevelDisplay()
-    
-    // Re-render current page with new scale
-    this.pages[this.currentPage].rendered = false
-    this.renderPage(this.currentPage)
-    
-    // Return false to ensure the browser doesn't follow the href
-    return false;
-  }
-  
   updateZoomLevelDisplay() {
+    // Add stack trace to see what's calling this method
+    console.log("updateZoomLevelDisplay called from:", new Error().stack);
+    
     if (this.hasZoomLevelTarget) {
       const percentage = Math.round(this.currentScale * 100)
+      console.log("Updating zoom level display to:", percentage + "%", "Current scale:", this.currentScale);
       this.zoomLevelTarget.textContent = `${percentage}%`
+    } else {
+      console.warn("No zoom level target found to update display");
     }
   }
   
@@ -347,13 +499,31 @@ export default class extends Controller {
   
   // This is called when the scale value changes
   scaleValueChanged() {
+    console.log(`scaleValueChanged called: scaleValue=${this.scaleValue}, currentScale=${this.currentScale}, isZooming=${this.isZooming}, _zoomingInProgress=${this._zoomingInProgress}`);
+    
+    // Completely bypass scale changes if we're in a manual zoom operation
+    if (this.isZooming || this._zoomingInProgress) {
+      console.log("PROTECTED: Ignoring automatic scale change during manual zoom operation");
+      return;
+    }
+    
+    // Check for very small differences caused by rounding errors
+    const scaleDiff = Math.abs(this.scaleValue - this.currentScale);
+    if (scaleDiff < 0.001) {
+      console.log("Ignoring insignificant scale change (less than 0.001)");
+      return;
+    }
+    
     if (!this.isLoading && this.pdfDoc && this.scaleValue !== this.currentScale) {
-      this.currentScale = this.scaleValue
-      this.updateZoomLevelDisplay()
+      console.log(`Applying scale change from ${this.currentScale} to ${this.scaleValue}`);
+      this.currentScale = this.scaleValue;
+      this.updateZoomLevelDisplay();
       
       // Re-render current page with new scale
-      this.pages[this.currentPage].rendered = false
-      this.renderPage(this.currentPage)
+      if (this.pages[this.currentPage]) {
+        this.pages[this.currentPage].rendered = false;
+        this.renderPage(this.currentPage);
+      }
     }
   }
 

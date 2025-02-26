@@ -309,7 +309,8 @@
             
             <div class="flex items-center ml-4">
               <button 
-                data-action="click->pdf-viewer#zoomOut" 
+                id="zoomOutButton"
+                type="button"
                 class="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -317,7 +318,8 @@
               </button>
               <span class="mx-2 text-sm text-gray-600" data-pdf-viewer-target="zoomLevel">100%</span>
               <button 
-                data-action="click->pdf-viewer#zoomIn" 
+                id="zoomInButton"
+                type="button"
                 class="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
