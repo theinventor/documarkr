@@ -545,7 +545,7 @@ export default class extends Controller {
     
     // Create text content with field type and page number
     const textContent = document.createElement("div")
-    textContent.classList.add("text-sm")
+    textContent.classList.add("text-sm", "flex", "items-center")
     
     // Get field type display name
     let fieldTypeDisplay = ""
@@ -557,10 +557,22 @@ export default class extends Controller {
       case "checkbox": fieldTypeDisplay = "Checkbox"; break
     }
     
-    textContent.innerHTML = `
+    // Add color indicator if we have a signer ID
+    if (fieldData.document_signer_id) {
+      const signerIndex = this.getSignerIndexById(fieldData.document_signer_id);
+      if (signerIndex > 0) {
+        const colorIndicator = document.createElement("div");
+        colorIndicator.classList.add("w-3", "h-3", "rounded-full", "mr-2", `signer-color-${signerIndex}`);
+        textContent.appendChild(colorIndicator);
+      }
+    }
+    
+    const textSpan = document.createElement("span");
+    textSpan.innerHTML = `
       <span class="font-medium">${fieldTypeDisplay}</span>
       <span class="text-gray-500 ml-2">Page ${fieldData.page_number}</span>
-    `
+    `;
+    textContent.appendChild(textSpan);
     
     // Create delete button
     const deleteButton = document.createElement("button")
