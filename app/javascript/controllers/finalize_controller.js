@@ -989,8 +989,8 @@ export default class extends Controller {
     // Collect field data
     console.log("DEBUG: Collecting field data from visible fields");
     this.fieldTargets.forEach(field => {
-      // Only include fields that are visible and completed
-      if (field.style.display !== 'none' && field.dataset.completed === 'true') {
+      // Modified: Include fields that are visible and either completed or are text/date fields
+      if (field.style.display !== 'none' && (field.dataset.completed === 'true' || field.classList.contains('text-field'))) {
         try {
           // Get field information
           const fieldId = field.dataset.fieldId;
@@ -1014,6 +1014,9 @@ export default class extends Controller {
               fieldType = 'text';
             }
           }
+          
+          // Add debugging for field type detection
+          console.log(`DEBUG: Field ${fieldId} identified as type: ${fieldType}, has class text-field: ${field.classList.contains('text-field')}`);
           
           // Get field position and size
           const xPosition = parseFloat(field.dataset.xPosition);
@@ -1362,8 +1365,17 @@ export default class extends Controller {
           fieldType = 'initials';
         }
       }
+
+      // Always check the field for a div with text content - if found, treat as text field
+      if (fieldType === 'unknown' || !fieldType) {
+        const textElement = field.querySelector ? field.querySelector('div') : null;
+        if (textElement && textElement.textContent) {
+          console.log(`DEBUG: Found div with text content, treating as text field: "${textElement.textContent}"`);
+          fieldType = 'text';
+        }
+      }
       
-      console.log(`DEBUG: Processing ${fieldType} field at (${x}, ${y})`);
+      console.log(`DEBUG: Processing ${fieldType} field at position (${x}, ${y})`);
       
       // Get field dimensions (from dataset or directly from field properties)
       const width = parseFloat(field.width || field.dataset?.width || 0);
@@ -1469,10 +1481,25 @@ export default class extends Controller {
         const textElement = field.querySelector ? field.querySelector('div') : null;
         if (textElement) {
           textContent = textElement.textContent || '';
+          console.log(`DEBUG: Found text content in div: "${textContent}"`);
         } 
         // If no DOM element found, try to get from value property
         else if (field.value && typeof field.value === 'string') {
           textContent = field.value;
+          console.log(`DEBUG: Using value property for text: "${textContent}"`);
+        }
+        // Try getting innerHTML if no div or value
+        else if (field.innerHTML) {
+          // Create a temporary element to strip HTML tags
+          const temp = document.createElement('div');
+          temp.innerHTML = field.innerHTML;
+          textContent = temp.textContent || '';
+          console.log(`DEBUG: Extracted text from innerHTML: "${textContent}"`);
+        }
+        // Try the dataset value as a last resort
+        else if (field.dataset && field.dataset.value) {
+          textContent = field.dataset.value;
+          console.log(`DEBUG: Using dataset value: "${textContent}"`);
         }
         
         console.log(`DEBUG: Raw text content for ${fieldType} field: "${textContent}"`);
@@ -1505,8 +1532,8 @@ export default class extends Controller {
           // Embed a standard font
           const font = await pdfDoc.embedFont('Helvetica');
           
-          // Calculate appropriate font size based on field dimensions
-          const fontSize = Math.min(18, height * 0.8); // Increased from 16
+          // Calculate appropriate font size based on field dimensions - make text more prominent
+          const fontSize = Math.min(24, height * 0.8); // Increased from 18 to 24 for better visibility
           
           // Calculate text width to center it
           const textWidth = font.widthOfTextAtSize(textContent, fontSize);
@@ -1514,20 +1541,20 @@ export default class extends Controller {
           
           // Force Y position to be more consistent
           // PDF origin is bottom-left, so we need to position from bottom
-          const yPosition = y - (height / 2) + (fontSize / 2); // Center text vertically
+          const yPosition = y - (height / 2) + (fontSize / 3); // Adjusted for better vertical centering
           
           console.log(`DEBUG: Drawing ${fieldType} text with font size ${fontSize} at (${xCentered}, ${yPosition})`);
           
-          // First draw a light background box for the text field
+          // First draw a more prominent background box for better visibility
           page.drawRectangle({
             x: x,
             y: y - height,
             width: width,
             height: height,
-            color: rgb(0.95, 0.95, 0.95), // Light gray background
-            borderColor: rgb(0.8, 0.8, 0.8), // Darker border
-            borderWidth: 0.5,
-            opacity: 0.5
+            color: rgb(0.9, 0.9, 1.0), // Light blue background
+            borderColor: rgb(0.7, 0.7, 0.9), // Darker border
+            borderWidth: 1.0, // Thicker border
+            opacity: 0.8 // More opaque
           });
           
           // Draw the text (centered in the field)
@@ -1536,7 +1563,7 @@ export default class extends Controller {
             y: yPosition,
             size: fontSize,
             font: font,
-            color: rgb(0, 0, 0), // Black text
+            color: rgb(0, 0, 0.7), // Dark blue text for better contrast
             lineHeight: fontSize * 1.2
           });
           
