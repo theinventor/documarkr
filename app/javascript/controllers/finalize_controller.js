@@ -1,8 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Helper function to create RGB colors for PDF
-const rgb = (r, g, b) => ({ r, g, b });
-
 // Connects to data-controller="finalize"
 export default class extends Controller {
   static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas", 
@@ -1181,9 +1178,6 @@ export default class extends Controller {
       const pdfDoc = await PDFDocument.load(pdfData);
       console.log("DEBUG: PDF document loaded successfully");
       
-      // Create a mock field element to test the addFieldToPdf method
-      console.log("DEBUG: Processing fields from documentData...");
-      
       // Check if documentData has fields to process
       if (!documentData || !documentData.fields || documentData.fields.length === 0) {
         console.warn("DEBUG: No fields to process in documentData");
@@ -1224,7 +1218,7 @@ export default class extends Controller {
             }
             
             // Call the method to add the field to the PDF
-            await this.addFieldToPdf(pdfDoc, page, mockFieldElement, x, y);
+            await this.addFieldToPdf(pdfDoc, page, mockFieldElement, x, y, rgb);
           } catch (fieldError) {
             console.error(`DEBUG: Error adding field ${fieldData.id} to PDF:`, fieldError);
             // Continue with other fields instead of stopping the entire process
@@ -1361,7 +1355,7 @@ export default class extends Controller {
   }
   
   // Helper method to add a field to PDF
-  async addFieldToPdf(pdfDoc, page, field, x, y) {
+  async addFieldToPdf(pdfDoc, page, field, x, y, rgb) {
     console.log(`DEBUG: addFieldToPdf called for field ${field.id || field.dataset?.fieldId}`);
     
     try {
@@ -1478,6 +1472,71 @@ export default class extends Controller {
             width: drawWidth,
             height: drawHeight
           });
+          
+          // Only for signature fields (not initials), add a C-shaped outline and "Signed by" text
+          if (fieldType === 'signature') {
+            // Get a name for the signature - default to "Signer" if not available
+            let signerName = "Signer";
+            
+            // Try to get name from field data attributes or parent elements if available
+            if (field.dataset && field.dataset.signerName) {
+              signerName = field.dataset.signerName;
+            } else if (field.closest && field.closest('[data-signer-name]')) {
+              signerName = field.closest('[data-signer-name]').dataset.signerName;
+            }
+            
+            // Calculate position for C-shaped outline
+            const outlineX = x + xOffset - 10; // Slightly to the left of the signature
+            const outlineY = y - drawHeight - yOffset; // Bottom of signature
+            const outlineHeight = drawHeight + 10; // Slightly taller than the signature
+            const outlineWidth = 30; // Width of the C shape
+            
+            try {
+              console.log("DEBUG: Drawing C-shaped outline for signature");
+              
+              // Left vertical line
+              page.drawLine({
+                start: { x: outlineX, y: outlineY },
+                end: { x: outlineX, y: outlineY + outlineHeight },
+                thickness: 2,
+                color: rgb(0, 0, 0),
+                opacity: 0.9
+              });
+              
+              // Top horizontal line (partial)
+              page.drawLine({
+                start: { x: outlineX, y: outlineY + outlineHeight },
+                end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+                thickness: 2,
+                color: rgb(0, 0, 0),
+                opacity: 0.9
+              });
+              
+              // Bottom horizontal line (partial)
+              page.drawLine({
+                start: { x: outlineX, y: outlineY },
+                end: { x: outlineX + outlineWidth, y: outlineY },
+                thickness: 2,
+                color: rgb(0, 0, 0),
+                opacity: 0.9
+              });
+              
+              // Add "Signed by: [name]" text
+              const font = await pdfDoc.embedFont('Helvetica');
+              page.drawText(`Signed by: ${signerName}`, {
+                x: outlineX + 5,
+                y: outlineY - 15, // Below the signature
+                size: 9, // Small font size
+                font: font,
+                color: rgb(0, 0, 0),
+                opacity: 1.0
+              });
+              
+              console.log(`DEBUG: Successfully added signature border and text`);
+            } catch (borderError) {
+              console.error(`DEBUG: Error drawing signature border:`, borderError);
+            }
+          }
           
           console.log(`DEBUG: Successfully added ${fieldType} image to PDF`);
         } catch (imgError) {
