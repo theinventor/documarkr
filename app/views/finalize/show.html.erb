@@ -71,6 +71,8 @@
                 data-width="<%= field.width %>"
                 data-height="<%= field.height %>"
                 data-field-id="field-<%= field.id %>"
+                data-signer-name="<%= field.document_signer.name %>"
+                data-signer-id="<%= field.document_signer_id %>"
                 class="form-field-container completed <%= field.field_type %>-field positioned-field">
                 <% case field.field_type %>
                 <% when 'signature' %>

@@ -879,7 +879,7 @@ export default class extends Controller {
         submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
         submitButton.classList.add('hover:bg-green-700');
       } else {
-        submitButton.disabled = true;
+    submitButton.disabled = true;
         submitButton.classList.add('opacity-50', 'cursor-not-allowed');
         submitButton.classList.remove('hover:bg-green-700');
       }
@@ -1087,11 +1087,13 @@ export default class extends Controller {
               y: yPosition,
               width,
               height,
-              value
+              value,
+              signerName: field.dataset.signerName || null,
+              signerId: field.dataset.signerId || null
             });
             
-            console.log(`DEBUG: Added ${fieldType} field ${fieldId} to document data`);
-          } else {
+            console.log(`DEBUG: Added ${fieldType} field ${fieldId} to document data with signer: ${field.dataset.signerName}`);
+    } else {
             console.warn(`DEBUG: Field ${fieldId} has no value, skipping`);
           }
         } catch (fieldError) {
@@ -1209,6 +1211,62 @@ export default class extends Controller {
             mockFieldElement.dataset.width = fieldData.width;
             mockFieldElement.dataset.height = fieldData.height;
             mockFieldElement.className = `${fieldData.type}-field`;
+            
+            // Add signer name and ID from field data for ALL field types
+            if (fieldData.signerName) {
+              mockFieldElement.dataset.signerName = fieldData.signerName;
+              console.log(`DEBUG: Using signer name "${fieldData.signerName}" from field data for ${fieldData.type} field ${fieldData.id}`);
+            }
+            
+            if (fieldData.signerId) {
+              mockFieldElement.dataset.signerId = fieldData.signerId;
+            }
+            
+            // Additional fallback methods for signature fields only
+            if (fieldData.type === 'signature' && !fieldData.signerName) {
+              // Try multiple approaches to get signer name
+              // This is important for the "Signed by: [name]" text next to signatures
+              let signerName = null;
+              
+              // Method 1: Try to get from signer ID value
+              if (this.hasSignerIdValue) {
+                signerName = document.querySelector(`[data-signer-id="${this.signerIdValue}"]`)?.dataset?.signerName;
+              }
+              
+              // Method 2: Try to get from any element with signer information
+              if (!signerName) {
+                const signerElement = document.querySelector('[data-signer-name]');
+                if (signerElement) {
+                  signerName = signerElement.dataset.signerName;
+                }
+              }
+              
+              // Method 3: Try to get from page metadata or profile information
+              if (!signerName) {
+                const profileElement = document.querySelector('.user-profile-name, .signer-name, [data-user-name]');
+                if (profileElement) {
+                  signerName = profileElement.textContent.trim() || profileElement.dataset.userName;
+                }
+              }
+              
+              // Method 4: Check if there's a text field with name information in the document data
+              if (!signerName && documentData && documentData.fields) {
+                // Look for text fields that might contain name information
+                const nameField = documentData.fields.find(f => 
+                  f.type === 'text' && 
+                  (f.id.toLowerCase().includes('name') || 
+                   (typeof f.value === 'string' && f.value.split(' ').length >= 2))
+                );
+                
+                if (nameField && nameField.value) {
+                  signerName = nameField.value;
+                }
+              }
+              
+              // Default to "Signer" if no name found
+              mockFieldElement.dataset.signerName = signerName || "Signer";
+              console.log(`DEBUG: Set signer name to "${mockFieldElement.dataset.signerName}" for signature field`);
+            }
             
             // Add the value
             if (fieldData.type === 'signature' || fieldData.type === 'initials') {
@@ -1880,7 +1938,7 @@ export default class extends Controller {
     if (value) {
       try {
         // Parse and format the date more robustly
-        const date = new Date(value);
+      const date = new Date(value);
         
         // Validate that the date is valid
         if (isNaN(date.getTime())) {
@@ -1890,22 +1948,22 @@ export default class extends Controller {
         }
         
         // Format the date for display with a more readable format
-        const formattedDate = date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
-          year: 'numeric' 
-        });
-        
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
         console.log(`DEBUG: Formatted date field ${fieldId}: "${value}" → "${formattedDate}"`);
         
         // Save the formatted date
-        this.updateField(fieldId, formattedDate);
+      this.updateField(fieldId, formattedDate);
         
         // Mark field as date type explicitly
         field.classList.add('date-field');
         
         // Update completion status
-        this.updateFieldStatuses();
+      this.updateFieldStatuses();
       } catch (error) {
         console.error(`DEBUG: Error processing date: ${error.message}`);
         alert('Error processing date. Please try a different format.');
@@ -1914,7 +1972,7 @@ export default class extends Controller {
       alert('Please select a date');
     }
   }
-
+  
   // Add submit button to the page
   addSubmitButton() {
     const existingButton = document.getElementById('document-submit-button');
@@ -1925,7 +1983,7 @@ export default class extends Controller {
     submitButton.id = 'document-submit-button';
     submitButton.textContent = 'Sign Document';
     submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
-    submitButton.disabled = true;
+        submitButton.disabled = true;
     submitButton.setAttribute('form', 'sign-form');
     submitButton.setAttribute('type', 'submit');
     
