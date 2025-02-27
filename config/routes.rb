@@ -32,6 +32,11 @@ Rails.application.routes.draw do
 
     # Form field completion
     # post "form_fields/:field_id/complete", to: "documents#complete_field", as: "complete_field"
+
+    # Add the finalize routes
+    resource :finalize, only: [ :show ], controller: :finalize do
+      post :export_pdf
+    end
   end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

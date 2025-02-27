@@ -1,9 +1,9 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Connects to data-controller="field-signing"
+// Connects to data-controller="finalize"
 export default class extends Controller {
   static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas", 
-                    "fieldsList", "progressBar", "completedCount", "totalCount"]
+                    "fieldsList", "progressBar", "completedCount", "totalCount", "savePdfButton"]
   static values = {
     documentId: Number,
     signerId: Number,
@@ -13,12 +13,104 @@ export default class extends Controller {
     completeRedirectUrl: String
   }
   
+  // Event handler for the PDF viewer's page change event
+  handlePageChangeEvent(event) {
+    console.log("Page change event received:", event);
+    // In the new layout with all pages displayed, we just need to ensure
+    // fields are positioned correctly
+    this.updateFieldPositions();
+  }
+  
+  // Updates the positions of fields based on current PDF viewer scale
+  updateFieldPositions() {
+    console.log("Updating field positions");
+    
+    // Find the PDF viewer element
+    const pdfViewerElement = document.querySelector('[data-controller~="pdf-viewer"]');
+    if (!pdfViewerElement) {
+      console.warn("PDF viewer element not found - cannot position fields correctly");
+      return;
+    }
+    
+    // Get the container elements for each page
+    const pageContainers = document.querySelectorAll('.pdf-page');
+    if (pageContainers.length === 0) {
+      console.warn("No page containers found - cannot position fields");
+      return;
+    }
+    
+    console.log(`Found ${pageContainers.length} page containers`);
+    
+    // Loop through each field
+    this.fieldTargets.forEach(field => {
+      // Get the page number for this field
+      const pageNumber = parseInt(field.dataset.page, 10);
+      
+      // Find the corresponding page container
+      const pageContainer = document.querySelector(`.pdf-page[data-page-number="${pageNumber}"]`);
+      if (!pageContainer) {
+        console.warn(`No container found for page ${pageNumber}`);
+        return;
+      }
+      
+      // Position the field based on the page container position
+      this.positionFieldOnPage(field, pageContainer);
+    });
+  }
+  
+  // Helper method to position a field on a page
+  positionFieldOnPage(field, pageContainer) {
+    // Get field position data
+    const xPos = parseFloat(field.dataset.xPosition);
+    const yPos = parseFloat(field.dataset.yPosition);
+    
+    // Get the page container's dimensions
+    const pageRect = pageContainer.getBoundingClientRect();
+    
+    // Calculate absolute position
+    const absoluteX = pageRect.left + (xPos / 100) * pageRect.width;
+    const absoluteY = pageRect.top + (yPos / 100) * pageRect.height;
+    
+    // Apply position (add to any transform for scaling)
+    field.style.left = `${absoluteX}px`;
+    field.style.top = `${absoluteY}px`;
+  }
+  
+  // Setup click handlers for all fields
+  setupFieldClickHandlers() {
+    console.log("Setting up field click handlers for all fields");
+    
+    // Add click handlers to all fields
+    this.fieldTargets.forEach(field => {
+      const fieldType = field.dataset.fieldType;
+      const fieldId = field.dataset.fieldId;
+      
+      console.log(`Setting up click handler for field ${fieldId} of type ${fieldType}`);
+      
+      // Set the data-action attribute based on field type
+      field.setAttribute('data-action', 'click->finalize#handleFieldClick');
+      
+      // For any field that's already completed, we still want to allow clicks
+      // to potentially edit/update the field
+      if (field.dataset.completed === "true") {
+        console.log(`Field ${fieldId} is already completed, but still allowing clicks`);
+      }
+    });
+  }
+  
   connect() {
     console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
     console.log("%cFNALIZING CONTROLLER CONNECTED!!!", "color: purple; font-weight: bold; font-size: 24px;");
     console.log("%c██████████████████████████████████████████████████", "color: purple; font-size: 20px;");
 
-    console.log("Field signing controller connected");
+    console.log("Finalize controller connected");
+    
+    console.log("DEBUG: Checking for savePdfButton target...");
+    if (this.hasSavePdfButtonTarget) {
+      console.log("DEBUG: savePdfButton target found:", this.savePdfButtonTarget);
+    } else {
+      console.warn("DEBUG: savePdfButton target is missing! Please check your HTML markup.");
+    }
     
     // Install event listeners
     this.handlePageChangeEvent = this.handlePageChangeEvent.bind(this);
@@ -92,6 +184,21 @@ export default class extends Controller {
     } else {
       console.error("Modal target is MISSING on connect! Field interactions won't work properly.");
     }
+    
+    // Manually check for Save PDF button
+    console.log("DEBUG: Checking for Save PDF button by query selector...");
+    const savePdfButton = document.querySelector('[data-action="click->finalize#savePdf"]');
+    if (savePdfButton) {
+      console.log("DEBUG: Found Save PDF button via querySelector:", savePdfButton);
+      // Add additional click handler for debugging
+      savePdfButton.addEventListener('click', (e) => {
+        console.log("DEBUG: Save PDF button clicked via direct event listener!");
+        // Call our savePdf method directly
+        this.savePdf(e);
+      });
+    } else {
+      console.error("DEBUG: Save PDF button not found via querySelector! Check HTML markup.");
+    }
   }
   
   disconnect() {
@@ -99,14 +206,6 @@ export default class extends Controller {
     document.removeEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
     document.removeEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
     document.removeEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
-  }
-  
-  // Event handler for the PDF viewer's page change event
-  handlePageChangeEvent(event) {
-    console.log("Page change event received:", event);
-    // In the new layout with all pages displayed, we just need to ensure
-    // fields are positioned correctly
-    this.updateFieldPositions();
   }
   
   initialize() {
@@ -207,14 +306,14 @@ export default class extends Controller {
     input.type = 'text';
     input.className = 'text-input';
     input.placeholder = field.dataset.fieldLabel || 'Enter text';
-    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
+    input.setAttribute('data-action', 'input->finalize#handleInputChangeUI');
     
     // Create save button
     const saveButton = document.createElement('button');
     saveButton.textContent = 'Save';
     saveButton.className = 'save-button opacity-50 cursor-not-allowed';
     saveButton.disabled = true;
-    saveButton.setAttribute('data-action', 'click->field-signing#saveTextField');
+    saveButton.setAttribute('data-action', 'click->finalize#saveTextField');
     
     // Add to container
     container.appendChild(input);
@@ -243,14 +342,14 @@ export default class extends Controller {
     const input = document.createElement('input');
     input.type = 'date';
     input.className = 'date-input';
-    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
+    input.setAttribute('data-action', 'input->finalize#handleInputChangeUI');
     
     // Create save button
     const saveButton = document.createElement('button');
     saveButton.textContent = 'Save';
     saveButton.className = 'save-button opacity-50 cursor-not-allowed';
     saveButton.disabled = true;
-    saveButton.setAttribute('data-action', 'click->field-signing#saveDateField');
+    saveButton.setAttribute('data-action', 'click->finalize#saveDateField');
     
     // Add to container
     container.appendChild(input);
@@ -708,7 +807,7 @@ export default class extends Controller {
   // Handle changes to direct inputs (text, date)
   handleInputChange(event) {
     const input = event.target;
-    const field = input.closest('[data-field-signing-target="field"]');
+    const field = input.closest('[data-finalize-target="field"]');
     if (!field) return;
     
     const fieldId = field.dataset.fieldId;
@@ -736,224 +835,10 @@ export default class extends Controller {
     this.checkCompletionStatus();
   }
   
-  // Add submit button to the page
-  addSubmitButton() {
-    const existingButton = document.getElementById('document-submit-button');
-    if (existingButton) return;
-    
-    // Create a submit button in case the template doesn't have one
-    const submitButton = document.createElement('button');
-    submitButton.id = 'document-submit-button';
-    submitButton.textContent = 'Sign Document';
-    submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
-    submitButton.disabled = true;
-    submitButton.setAttribute('form', 'sign-form');
-    submitButton.setAttribute('type', 'submit');
-    
-    // Find a place to add the button
-    const sidebar = document.querySelector('[data-field-signing-target="fieldsList"]');
-    if (sidebar && sidebar.parentElement) {
-      const buttonContainer = document.createElement('div');
-      buttonContainer.className = 'p-4 border-t border-gray-200';
-      buttonContainer.appendChild(submitButton);
-      sidebar.parentElement.appendChild(buttonContainer);
-    }
-  }
-
-  // New method to ensure all fields have click handlers
-  setupFieldClickHandlers() {
-    console.log("Setting up field click handlers");
-    
-    this.fieldTargets.forEach(field => {
-      const fieldType = field.dataset.fieldType;
-      
-      // Remove any existing click handlers to avoid duplication
-      field.removeAttribute('data-action');
-      
-      // Add the appropriate click handler based on field type
-      if (fieldType === 'text' || fieldType === 'date') {
-        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
-        
-        // Setup text field input if needed
-        if (fieldType === 'text') {
-          this.setupTextField(field);
-        } else if (fieldType === 'date') {
-          this.setupDateField(field);
-        }
-      } else if (fieldType === 'signature' || fieldType === 'initials') {
-        // Use the handleFieldClick method for all fields for consistent handling
-        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
-      }
-      
-      console.log(`Set up ${fieldType} field: ${field.dataset.fieldId} with action: ${field.getAttribute('data-action')}`);
-    });
-  }
-
-  updateButtonState() {
-    // Enable/disable the save button based on whether the signature pad is empty
-    if (this.signaturePad && !this.signaturePad.isEmpty()) {
-      this.saveButtonTarget.disabled = false;
-      this.saveButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
-      this.saveButtonTarget.classList.add('hover:bg-blue-700');
-    } else {
-      this.saveButtonTarget.disabled = true;
-      this.saveButtonTarget.classList.add('opacity-50', 'cursor-not-allowed');
-      this.saveButtonTarget.classList.remove('hover:bg-blue-700');
-    }
-  }
-  
-  // Update field positions based on the current PDF pages in the DOM
-  updateFieldPositions() {
-    console.log("Updating field positions");
-    
-    // Check if we have a container target
-    if (!this.hasContainerTarget || !this.hasPageContainerTarget) {
-      console.error("Missing container target or page container! Cannot position fields.");
-      console.error("Container target present:", this.hasContainerTarget);
-      console.error("Page container target present:", this.hasPageContainerTarget);
-      return;
-    }
-    
-    try {
-      // Get the container rect to calculate relative positions
-      const containerRect = this.containerTarget.getBoundingClientRect();
-      const pageContainer = this.pageContainerTarget;
-      const pageRect = pageContainer.getBoundingClientRect();
-      
-      console.log(`Page container positioned at: top=${pageRect.top}, left=${pageRect.left}, width=${pageRect.width}, height=${pageRect.height}`);
-      
-      // Find all PDF page canvases
-      const canvases = document.querySelectorAll('.pdf-page');
-      
-      if (!canvases.length) {
-        console.log("No PDF pages found yet, will try again later");
-        setTimeout(() => this.updateFieldPositions(), 500);
-        return;
-      }
-      
-      console.log(`Found ${canvases.length} PDF page canvases`);
-      
-      // For each page, position fields
-      canvases.forEach((canvas, index) => {
-        const pageNumber = index + 1;
-        const canvasRect = canvas.getBoundingClientRect();
-        
-        // Calculate page offset relative to container
-        const pageOffsetTop = canvasRect.top - containerRect.top;
-        const pageOffsetLeft = canvasRect.left - containerRect.left;
-        
-        console.log(`Page ${pageNumber} positioned at: left=${pageOffsetLeft}, top=${pageOffsetTop}, width=${canvasRect.width}, height=${canvasRect.height}`);
-        
-        // Find all fields for this page
-        const fields = this.fieldTargets.filter(field => 
-          parseInt(field.dataset.page, 10) === pageNumber
-        );
-        
-        console.log(`Found ${fields.length} fields for page ${pageNumber}`);
-        
-        fields.forEach(field => {
-          // Get the position as percentage of the page
-          const xPosPercent = parseFloat(field.dataset.xPosition);
-          const yPosPercent = parseFloat(field.dataset.yPosition);
-          
-          // Calculate absolute position within the page
-          const xPosAbsolute = (xPosPercent / 100) * canvasRect.width;
-          const yPosAbsolute = (yPosPercent / 100) * canvasRect.height;
-          
-          // Set absolute position relative to the container
-          field.style.position = 'absolute';
-          field.style.left = `${pageOffsetLeft + xPosAbsolute}px`;
-          field.style.top = `${pageOffsetTop + yPosAbsolute}px`;
-          
-          // Apply minimum sizes for better visibility
-          const fieldWidth = Math.max(parseFloat(field.dataset.width) * 1.5, 100);
-          const fieldHeight = Math.max(parseFloat(field.dataset.height) * 1.5, 40);
-          
-          field.style.width = `${fieldWidth}px`;
-          field.style.height = `${fieldHeight}px`;
-          
-          // Use transform for centering
-          field.style.transform = 'translate(-50%, -50%)';
-          
-          // Make field visible
-          field.classList.remove('hidden');
-          field.classList.add('positioned');
-          
-          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
-        });
-      });
-    } catch (error) {
-      console.error("Error positioning fields:", error);
-    }
-  }
-
-  // For direct saving of text fields
-  saveTextField(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const button = event.currentTarget;
-    const field = button.closest('[data-field-signing-target="field"]');
-    const input = field.querySelector('input[type="text"]');
-    
-    if (!field || !input) return;
-    
-    const fieldId = field.dataset.fieldId.replace('field-', '');
-    const value = input.value.trim();
-    
-    if (value) {
-      this.updateField(fieldId, value);
-      this.updateFieldStatuses();
-    } else {
-      alert('Please enter a value');
-    }
-  }
-  
-  // For direct saving of date fields
-  saveDateField(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const button = event.currentTarget;
-    const field = button.closest('[data-field-signing-target="field"]');
-    const input = field.querySelector('input[type="date"]');
-    
-    if (!field || !input) return;
-    
-    const fieldId = field.dataset.fieldId.replace('field-', '');
-    const value = input.value;
-    
-    if (value) {
-      // Format the date for display
-      const date = new Date(value);
-      const formattedDate = date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      });
-      
-      this.updateField(fieldId, formattedDate);
-      this.updateFieldStatuses();
-    } else {
-      alert('Please select a date');
-    }
-  }
-  
-  // Handle input changes (not submitting yet)
-  handleInputChange(event) {
-    // Enable save button when typing starts
-    const field = event.currentTarget.closest('[data-field-signing-target="field"]');
-    const saveButton = field.querySelector('button');
-    if (saveButton) {
-      saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
-      saveButton.disabled = false;
-    }
-  }
-  
   // Handle input blur (focus lost)
   handleInputBlur(event) {
     const input = event.currentTarget;
-    const field = input.closest('[data-field-signing-target="field"]');
+    const field = input.closest('[data-finalize-target="field"]');
     if (!field) return;
     
     // Don't auto-save as we want explicit save button clicks
@@ -1051,6 +936,385 @@ export default class extends Controller {
       
       // Scroll the field into view
       field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  // Method to handle saving the PDF with fields
+  savePdf(event) {
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    console.log("%cSAVE PDF METHOD CALLED!!!", "color: red; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: red; font-size: 20px;");
+    console.log("DEBUG: Save PDF method called with event:", event);
+    
+    if (event) {
+      event.preventDefault();
+      console.log("DEBUG: Event prevented default");
+    } else {
+      console.warn("DEBUG: No event object provided to savePdf method!");
+    }
+    
+    console.log("DEBUG: Saving PDF with fields using PDF.js...");
+    
+    // Show loading state
+    const button = event ? event.currentTarget : document.querySelector('[data-finalize-target="savePdfButton"]');
+    console.log("DEBUG: Button found:", button);
+    
+    if (!button) {
+      console.error("DEBUG: Save PDF button not found!");
+      return;
+    }
+    
+    const originalText = button.innerHTML;
+    console.log("DEBUG: Original button text:", originalText);
+    
+    button.innerHTML = `
+      <svg class="animate-spin h-4 w-4 mr-1 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      Generating PDF...
+    `;
+    button.disabled = true;
+    console.log("DEBUG: Button updated to loading state");
+    
+    try {
+      console.log("DEBUG: Looking for PDF viewer element");
+      // Get the PDF viewer controller to access the PDF.js document instance
+      const pdfViewerElement = document.querySelector('[data-controller~="pdf-viewer"]');
+      if (!pdfViewerElement) {
+        console.error("DEBUG: PDF viewer element not found");
+        throw new Error("PDF viewer element not found");
+      }
+      console.log("DEBUG: PDF viewer element found:", pdfViewerElement);
+      
+      console.log("DEBUG: Getting stimulus controller from element");
+      const pdfViewerController = pdfViewerElement.__stimulusController;
+      console.log("DEBUG: PDF viewer controller:", pdfViewerController);
+      
+      if (!pdfViewerController) {
+        console.error("DEBUG: PDF viewer controller not accessible via __stimulusController");
+        console.log("DEBUG: Trying alternative methods to get controller...");
+        
+        // Try alternative methods to get the controller
+        if (window.Stimulus) {
+          console.log("DEBUG: Attempting to get controller via Stimulus application");
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(pdfViewerElement, "pdf-viewer");
+          if (controller) {
+            console.log("DEBUG: Found controller via Stimulus application:", controller);
+            if (controller.pdfInstance) {
+              console.log("DEBUG: PDF instance found in controller:", controller.pdfInstance);
+              this.processPdfDownload(controller.pdfInstance, button, originalText);
+              return;
+            }
+          }
+        }
+        
+        throw new Error("PDF viewer controller not available");
+      }
+      
+      if (!pdfViewerController.pdfInstance) {
+        console.error("DEBUG: PDF instance not found in controller");
+        throw new Error("PDF viewer not properly initialized");
+      }
+      
+      console.log("DEBUG: PDF instance found:", pdfViewerController.pdfInstance);
+      
+      // Get PDF.js document instance
+      const pdfDoc = pdfViewerController.pdfInstance;
+      
+      // Process the PDF
+      this.processPdfDownload(pdfDoc, button, originalText);
+      
+    } catch (error) {
+      console.error("DEBUG: Error in savePdf method:", error);
+      button.innerHTML = originalText;
+      button.disabled = false;
+      alert(`Failed to access PDF viewer: ${error.message}`);
+    }
+  }
+  
+  // Helper method to process the PDF download
+  processPdfDownload(pdfDoc, button, originalText) {
+    console.log("DEBUG: Processing PDF download with pdfDoc:", pdfDoc);
+    
+    // Import and use html2canvas for rendering fields
+    console.log("DEBUG: Attempting to import html2canvas...");
+    import('html2canvas').then(async ({ default: html2canvas }) => {
+      console.log("DEBUG: html2canvas imported successfully");
+      
+      // Collect data for the Node.js PDF.js service
+      const documentData = {
+        documentId: this.documentIdValue,
+        fields: []
+      };
+      console.log("DEBUG: Initialized documentData:", documentData);
+      
+      console.log("DEBUG: Processing fields, count:", this.fieldTargets.length);
+      // Collect field data for each field on the document
+      for (const field of this.fieldTargets) {
+        console.log("DEBUG: Processing field:", field);
+        const fieldId = field.dataset.fieldId;
+        const pageNumber = parseInt(field.dataset.page, 10);
+        const fieldType = field.dataset.fieldType;
+        const xPosition = parseFloat(field.dataset.xPosition);
+        const yPosition = parseFloat(field.dataset.yPosition);
+        const width = parseFloat(field.dataset.width);
+        const height = parseFloat(field.dataset.height);
+        
+        console.log(`DEBUG: Field data - ID: ${fieldId}, Type: ${fieldType}, Page: ${pageNumber}, Position: (${xPosition}, ${yPosition}), Size: ${width}x${height}`);
+        
+        // Get field content
+        let fieldValue = null;
+        
+        if (fieldType === 'signature' || fieldType === 'initials') {
+          // For signature/initials, capture the rendered image
+          const img = field.querySelector('img');
+          if (img) {
+            fieldValue = img.src;
+            console.log("DEBUG: Signature/initials image found:", fieldValue.substring(0, 50) + "...");
+          } else {
+            console.log("DEBUG: No signature/initials image found");
+          }
+        } else if (fieldType === 'text' || fieldType === 'date') {
+          // For text/date, get the text content
+          const textDiv = field.querySelector('div');
+          if (textDiv) {
+            fieldValue = textDiv.textContent;
+            console.log("DEBUG: Text/date content found:", fieldValue);
+          } else {
+            console.log("DEBUG: No text/date content found");
+          }
+        }
+        
+        // Add field data to the collection
+        if (fieldValue) {
+          documentData.fields.push({
+            id: fieldId,
+            pageNumber,
+            fieldType,
+            xPosition,
+            yPosition, 
+            width,
+            height,
+            value: fieldValue
+          });
+          console.log("DEBUG: Field added to documentData");
+        } else {
+          console.log("DEBUG: Field skipped (no value)");
+        }
+      }
+      
+      console.log("DEBUG: All fields processed, sending to Node service");
+      // For now, we'll just download a JSON file with the field data
+      // In the future, this will be sent to the Node.js PDF.js service
+      this.sendToNodeService(documentData, button, originalText);
+    }).catch(error => {
+      console.error("DEBUG: Error importing or using html2canvas:", error);
+      button.innerHTML = originalText;
+      button.disabled = false;
+      alert(`Failed to generate PDF: ${error.message}`);
+    });
+  }
+  
+  // Helper method to send data to the Node.js PDF.js service
+  // This will be implemented in the future
+  async sendToNodeService(documentData, button, originalText) {
+    console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
+    console.log("%cSENDING DATA TO NODE SERVICE", "color: green; font-weight: bold; font-size: 24px;");
+    console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
+    
+    try {
+      console.log("DEBUG: Data to be sent to Node.js PDF.js service:", documentData);
+      console.log("DEBUG: Document ID:", documentData.documentId);
+      console.log("DEBUG: Number of fields:", documentData.fields.length);
+      
+      // For now, we'll simulate a successful response
+      // In the future, this will be an actual API call to the Node.js service
+      
+      console.log("DEBUG: Creating JSON blob for download");
+      // Option 1: For temporary demo, download the JSON data
+      const jsonString = JSON.stringify(documentData, null, 2);
+      console.log("DEBUG: JSON string created, length:", jsonString.length);
+      
+      const jsonBlob = new Blob([jsonString], { type: 'application/json' });
+      console.log("DEBUG: JSON blob created, size:", jsonBlob.size);
+      
+      const filename = `document-${documentData.documentId}-fields.json`;
+      console.log("DEBUG: Downloading file with name:", filename);
+      
+      this.downloadFile(jsonBlob, filename);
+      
+      // Option 2: When the server endpoint is ready, send the data
+      /* 
+      const response = await fetch('/api/pdf-generation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify(documentData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.pdfUrl) {
+        // If the server returns a URL to the generated PDF, redirect to it
+        window.open(result.pdfUrl, '_blank');
+      } else if (result.pdfData) {
+        // If the server returns the PDF data directly, download it
+        const pdfBlob = this.base64ToBlob(result.pdfData, 'application/pdf');
+        this.downloadFile(pdfBlob, `document-${documentData.documentId}.pdf`);
+      }
+      */
+      
+      // Show success message
+      console.log("DEBUG: All operations completed, showing success message");
+      alert('PDF data prepared successfully. In the future, this will generate a PDF using a Node.js service with PDF.js.');
+    } catch (error) {
+      console.error("DEBUG: Error in sendToNodeService:", error);
+      alert(`Failed to generate PDF: ${error.message}`);
+    } finally {
+      // Reset button state
+      console.log("DEBUG: Resetting button state");
+      button.innerHTML = originalText;
+      button.disabled = false;
+      console.log("DEBUG: Button reset complete");
+    }
+  }
+  
+  // Helper method to download a file
+  downloadFile(blob, filename) {
+    console.log("DEBUG: downloadFile called with blob size:", blob.size, "and filename:", filename);
+    const url = window.URL.createObjectURL(blob);
+    console.log("DEBUG: Blob URL created:", url);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    console.log("DEBUG: Download link created");
+    
+    document.body.appendChild(a);
+    console.log("DEBUG: Link appended to document");
+    
+    console.log("DEBUG: Triggering click on download link");
+    a.click();
+    
+    console.log("DEBUG: Removing link from document");
+    document.body.removeChild(a);
+    
+    console.log("DEBUG: Revoking blob URL");
+    window.URL.revokeObjectURL(url);
+    
+    console.log("DEBUG: Download process complete");
+  }
+  
+  // Helper method to convert base64 to Blob
+  base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64.split(',')[1] || base64);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    
+    return new Blob(byteArrays, { type: mimeType });
+  }
+
+  // For direct saving of text fields
+  saveTextField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-finalize-target="field"]');
+    const input = field.querySelector('input[type="text"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value.trim();
+    
+    if (value) {
+      this.updateField(fieldId, value);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please enter a value');
+    }
+  }
+  
+  // For direct saving of date fields
+  saveDateField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-finalize-target="field"]');
+    const input = field.querySelector('input[type="date"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value;
+    
+    if (value) {
+      // Format the date for display
+      const date = new Date(value);
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      this.updateField(fieldId, formattedDate);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please select a date');
+    }
+  }
+
+  // Add submit button to the page
+  addSubmitButton() {
+    const existingButton = document.getElementById('document-submit-button');
+    if (existingButton) return;
+    
+    // Create a submit button in case the template doesn't have one
+    const submitButton = document.createElement('button');
+    submitButton.id = 'document-submit-button';
+    submitButton.textContent = 'Sign Document';
+    submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
+    submitButton.disabled = true;
+    submitButton.setAttribute('form', 'sign-form');
+    submitButton.setAttribute('type', 'submit');
+    
+    // Find a place to add the button
+    const sidebar = document.querySelector('[data-finalize-target="fieldsList"]');
+    if (sidebar && sidebar.parentElement) {
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'p-4 border-t border-gray-200';
+      buttonContainer.appendChild(submitButton);
+      sidebar.parentElement.appendChild(buttonContainer);
+    }
+  }
+
+  // Handle input changes (just UI updates, not submitting)
+  handleInputChangeUI(event) {
+    // Enable save button when typing starts
+    const field = event.currentTarget.closest('[data-finalize-target="field"]');
+    const saveButton = field.querySelector('button');
+    if (saveButton) {
+      saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      saveButton.disabled = false;
     }
   }
 } 

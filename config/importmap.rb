@@ -12,3 +12,4 @@ pin "pdfjs-dist", to: "/vendor/javascript/pdfjs/pdf.mjs"
 pin "pdfjs-dist/build/pdf.worker", to: "/vendor/javascript/pdfjs/pdf.worker.mjs"
 
 pin "signature_pad", to: "https://ga.jspm.io/npm:signature_pad@4.1.5/dist/signature_pad.js"
+pin "html2canvas" # @1.4.1
