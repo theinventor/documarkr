@@ -1,0 +1,17 @@
+Document Fully Executed!
+=============================
+
+Hello <%= @creator.name %>,
+
+Great news! Your document "<%= @document.title %>" has been fully executed. All signers have completed the signing process.
+
+Document completed on: <%= @document.completed_at.strftime("%B %d, %Y at %I:%M %p") %>
+
+You can view the fully executed document at:
+<%= @document_url %>
+
+Thank you for using DocuMarkr for your document signing needs.
+
+---
+This is an automated email from DocuMarkr. Please do not reply to this email.
+© <%= Date.today.year %> DocuMarkr. All rights reserved. 

@@ -12,4 +12,15 @@ class DocumentMailer < ApplicationMailer
       subject: "#{@creator.name} has sent you a document to sign: #{@document.title}"
     )
   end
+
+  def completion_notification(document)
+    @document = document
+    @creator = @document.creator
+    @document_url = Rails.application.routes.url_helpers.document_url(@document)
+
+    mail(
+      to: @creator.email,
+      subject: "All signatures complete for document: #{@document.title}"
+    )
+  end
 end

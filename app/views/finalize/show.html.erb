@@ -1,0 +1,201 @@
+<% content_for :title, "Finalize: #{@document.title}" %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="<%= card_classes %>">
+    <div class="document-header flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Finalize: <%= @document.title %></h1>
+        <p class="text-sm text-gray-500">
+          Document created on <%= @document.created_at.strftime("%B %d, %Y") %>
+        </p>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <a href="<%= document_path(@document) %>" class="<%= button_classes(:outline, :sm) %>">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Document
+        </a>
+        
+        <button 
+          data-finalize-target="savePdfButton"
+          data-action="click->finalize#savePdf"
+          class="<%= button_classes(:primary, :sm) %>">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Save PDF
+        </button>
+      </div>
+    </div>
+    
+    <p class="text-gray-700 mb-6">
+      This page allows you to finalize your document with all filled fields and download a completed PDF.
+    </p>
+    
+    <div 
+      data-controller="pdf-viewer finalize" 
+      data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) if @document.file.attached? %>"
+      data-finalize-document-id-value="<%= @document.id %>"
+      class="relative">
+      
+      <!-- PDF Loading Indicator -->
+      <div data-pdf-viewer-target="loading" class="pdf-loading">
+        <div class="flex items-center justify-center p-12">
+          <svg class="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="ml-3 text-gray-700">Loading document...</span>
+        </div>
+      </div>
+      
+      <div 
+        data-finalize-target="container"
+        class="relative">
+        <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
+          <!-- PDF will be rendered here -->
+        </div>
+        
+        <% if @form_fields.any? %>
+          <% @form_fields.each do |field| %>
+            <% if field.completed? %>
+              <div 
+                data-finalize-target="field"
+                data-page="<%= field.page_number %>"
+                data-x-position="<%= field.x_position %>" 
+                data-y-position="<%= field.y_position %>" 
+                data-width="<%= field.width %>"
+                data-height="<%= field.height %>"
+                class="form-field-container completed <%= field.field_type %>-field">
+                <% case field.field_type %>
+                <% when 'signature' %>
+                  <% if field.value.present? %>
+                    <img src="<%= field.value %>" class="w-full h-full object-contain p-1" />
+                  <% end %>
+                <% when 'text' %>
+                  <div class="p-2 w-full h-full flex items-center">
+                    <%= field.value %>
+                  </div>
+                <% when 'date' %>
+                  <div class="p-2 w-full h-full flex items-center">
+                    <%= field.value %>
+                  </div>
+                <% when 'initials' %>
+                  <% if field.value.present? %>
+                    <img src="<%= field.value %>" class="w-full h-full object-contain p-1" />
+                  <% end %>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        <% else %>
+          <div class="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white/80 p-4 rounded-lg shadow-md text-center">
+              <p class="text-gray-500">No form fields found in this document.</p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+      
+      <!-- PDF Navigation Controls -->
+      <div class="flex items-center justify-between mt-4">
+        <button 
+          data-pdf-viewer-target="prevButton" 
+          data-action="click->pdf-viewer#prevPage"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button"
+          disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Previous Page
+        </button>
+        
+        <div class="flex items-center">
+          <span class="text-sm text-gray-700 mr-2">Page</span>
+          <span data-pdf-viewer-target="pageNum" class="text-sm font-medium text-gray-900">1</span>
+          <span class="text-sm text-gray-700 mx-1">of</span>
+          <span data-pdf-viewer-target="pageCount" class="text-sm font-medium text-gray-900">1</span>
+        </div>
+        
+        <button 
+          data-pdf-viewer-target="nextButton" 
+          data-action="click->pdf-viewer#nextPage"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button"
+          disabled>
+          Next Page
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Zoom Controls -->
+      <div class="flex items-center justify-center mt-4">
+        <button 
+          data-action="click->pdf-viewer#zoomOut"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+          </svg>
+        </button>
+        
+        <span data-pdf-viewer-target="zoomLevel" class="text-sm font-medium text-gray-900 mx-2">100%</span>
+        
+        <button 
+          data-action="click->pdf-viewer#zoomIn"
+          class="<%= button_classes(:outline, :sm) %> flex items-center"
+          type="button">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <div class="mt-8 border-t border-gray-200 pt-6">
+      <h2 class="text-lg font-medium text-gray-900 mb-4">Document Information</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-700">Document Details</h3>
+          <dl class="mt-2 text-sm text-gray-600">
+            <div class="flex justify-between py-1">
+              <dt>Status</dt>
+              <dd class="font-medium text-gray-900"><%= @document.status.capitalize %></dd>
+            </div>
+            <div class="flex justify-between py-1">
+              <dt>Created</dt>
+              <dd class="font-medium text-gray-900"><%= @document.created_at.strftime("%B %d, %Y") %></dd>
+            </div>
+            <div class="flex justify-between py-1">
+              <dt>Creator</dt>
+              <dd class="font-medium text-gray-900"><%= @document.creator&.name || "Unknown" %></dd>
+            </div>
+          </dl>
+        </div>
+        
+        <div>
+          <h3 class="text-sm font-medium text-gray-700">Form Field Summary</h3>
+          <dl class="mt-2 text-sm text-gray-600">
+            <div class="flex justify-between py-1">
+              <dt>Total Fields</dt>
+              <dd class="font-medium text-gray-900"><%= @form_fields.count %></dd>
+            </div>
+            <div class="flex justify-between py-1">
+              <dt>Completed Fields</dt>
+              <dd class="font-medium text-gray-900"><%= @form_fields.where(completed: true).count %></dd>
+            </div>
+            <div class="flex justify-between py-1">
+              <dt>Incomplete Fields</dt>
+              <dd class="font-medium text-gray-900"><%= @form_fields.where(completed: false).count %></dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

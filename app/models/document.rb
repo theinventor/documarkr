@@ -53,7 +53,7 @@ class Document < ApplicationRecord
   end
 
   def current_signer
-    document_signers.pending.order(:order).first&.user
+    document_signers.pending.order(:sign_order).first&.user
   end
 
   def log_activity(user, action, request = nil, additional_metadata = {})
@@ -94,8 +94,8 @@ class Document < ApplicationRecord
     return nil if current_signer.nil?
 
     # Find the next signer with a higher order value
-    document_signers.where("order > ?", current_signer.order)
-                    .order(:order)
+    document_signers.where("sign_order > ?", current_signer.sign_order)
+                    .order(:sign_order)
                     .first
   end
 
@@ -108,8 +108,8 @@ class Document < ApplicationRecord
         completed_at: Time.current
       )
 
-      # Trigger any completion notifications here
-      # DocumentMailer.completion_notification(self).deliver_later
+      # Notify the document owner that the document is fully executed
+      DocumentMailer.completion_notification(self).deliver_later
     end
   end
 end

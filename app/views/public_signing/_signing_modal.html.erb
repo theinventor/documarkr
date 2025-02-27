@@ -1,9 +1,17 @@
 <!-- Signature Modal -->
-<div data-field-signing-target="modal" class="hidden fixed inset-0 flex items-center justify-center z-50">
-  <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 z-50 overflow-hidden">
-    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+<div data-controller="signature-modal"
+     data-signature-modal-target="modal"
+     class="hidden fixed inset-0 flex items-center justify-center z-[1000]" 
+     id="signingModal" 
+     style="display:none;">
+  <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 z-[1001] overflow-hidden">
+    <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-blue-50">
       <h3 class="text-xl font-semibold text-gray-800">Complete Field</h3>
-      <button type="button" data-action="field-signing#closeModal" class="text-gray-500 hover:text-gray-700">
+      <button type="button" 
+              data-signature-modal-target="closeButton"
+              data-action="click->signature-modal#close" 
+              class="text-gray-500 hover:text-gray-700" 
+              id="closeModalButton">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -11,7 +19,7 @@
     </div>
     
     <!-- Signature Content -->
-    <div class="modal-content p-6" data-field-type="signature">
+    <div class="modal-content p-6" data-field-type="signature" data-signature-modal-target="signatureContainer">
       <div class="mb-4">
         <h4 class="text-lg font-medium text-gray-700 mb-2">Draw Your Signature</h4>
         <p class="text-sm text-gray-500">Use your mouse or finger to sign below.</p>
@@ -20,27 +28,56 @@
       <div class="bg-gray-50 border border-gray-300 rounded-md overflow-hidden mb-4"
            data-controller="signature-pad"
            data-signature-pad-color-value="#000000"
-           data-signature-pad-line-width-value="2"
-           data-action="signature-pad:save->field-signing#signatureComplete">
+           data-signature-pad-line-width-value="3"
+           data-action="signature-pad:save->field-signing#signatureComplete"
+           id="signaturePadContainer">
         
-        <div class="relative">
-          <canvas data-signature-pad-target="canvas" class="w-full h-40 touch-none"></canvas>
+        <div class="relative w-full h-56">
+          <!-- CRITICAL: Make sure canvas has fixed dimensions and absolute position -->
+          <canvas id="signatureCanvas" 
+                  data-signature-pad-target="canvas" 
+                  data-signature-modal-target="canvas"
+                  class="absolute inset-0 w-full h-full touch-none cursor-crosshair" 
+                  style="background-color: #FFFFFF; position: absolute; z-index: 1002;"></canvas>
+          
+          <!-- Visual feedback element to show where to draw -->
+          <div class="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" width="150" height="50" viewBox="0 0 200 50" fill="none" stroke="#000000">
+              <path d="M10,25 C20,10 30,40 40,25 C50,10 60,40 70,25 C80,10 90,40 100,25 C110,10 120,40 130,25 C140,10 150,40 160,25 C170,10 180,40 190,25" stroke-width="1.5"/>
+            </svg>
+          </div>
         </div>
         
-        <div class="p-2 flex justify-between bg-white border-t border-gray-200">
+        <div class="p-3 flex justify-between bg-white border-t border-gray-200" 
+             data-signature-modal-target="buttonContainer"
+             style="display: flex !important;">
           <button type="button" 
-                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  data-signature-pad-target="clearButton">Clear</button>
+                  class="px-4 py-2 text-base border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  data-signature-pad-target="clearButton"
+                  data-action="click->signature-pad#clear"
+                  style="display: inline-block !important;">Clear</button>
                   
           <button type="button"
-                  class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  data-signature-pad-target="saveButton">Save Signature</button>
+                  class="px-4 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-signature-pad-target="saveButton"
+                  data-action="click->signature-pad#save"
+                  style="display: inline-block !important;">Save Signature</button>
         </div>
+      </div>
+      
+      <!-- Debug button that uses controller action -->
+      <div class="text-center">
+        <button type="button" 
+                class="px-3 py-1 text-xs border border-gray-300 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                data-action="click->signature-modal#testDraw"
+                data-field-id="signatureCanvas">
+          Test Draw (Debug)
+        </button>
       </div>
     </div>
     
     <!-- Initials Content -->
-    <div class="modal-content p-6 hidden" data-field-type="initials">
+    <div class="modal-content p-6 hidden" data-field-type="initials" data-signature-modal-target="initialsContainer" style="display:none;">
       <div class="mb-4">
         <h4 class="text-lg font-medium text-gray-700 mb-2">Draw Your Initials</h4>
         <p class="text-sm text-gray-500">Use your mouse or finger to enter your initials below.</p>
@@ -49,22 +86,51 @@
       <div class="bg-gray-50 border border-gray-300 rounded-md overflow-hidden mb-4"
            data-controller="signature-pad"
            data-signature-pad-color-value="#000000"
-           data-signature-pad-line-width-value="2"
-           data-action="signature-pad:save->field-signing#signatureComplete">
+           data-signature-pad-line-width-value="3"
+           data-action="signature-pad:save->field-signing#signatureComplete"
+           id="initialsPadContainer">
         
-        <div class="relative">
-          <canvas data-signature-pad-target="canvas" class="w-full h-32 touch-none"></canvas>
+        <div class="relative w-full h-48">
+          <!-- CRITICAL: Make sure canvas has fixed dimensions and absolute position -->
+          <canvas id="initialsCanvas" 
+                  data-signature-pad-target="canvas"
+                  data-signature-modal-target="canvas"
+                  class="absolute inset-0 w-full h-full touch-none cursor-crosshair" 
+                  style="background-color: #FFFFFF; position: absolute; z-index: 1002;"></canvas>
+          
+          <!-- Visual feedback element to show where to draw -->
+          <div class="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" width="100" height="40" viewBox="0 0 100 40" fill="none" stroke="#000000">
+              <path d="M20,30 L20,10 M20,20 L35,20 M50,30 L50,10 M50,10 L65,10 M50,20 L65,20 M50,30 L65,30" stroke-width="1.5"/>
+            </svg>
+          </div>
         </div>
         
-        <div class="p-2 flex justify-between bg-white border-t border-gray-200">
+        <div class="p-3 flex justify-between bg-white border-t border-gray-200"
+             data-signature-modal-target="buttonContainer"
+             style="display: flex !important;">
           <button type="button" 
-                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  data-signature-pad-target="clearButton">Clear</button>
+                  class="px-4 py-2 text-base border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  data-signature-pad-target="clearButton"
+                  data-action="click->signature-pad#clear"
+                  style="display: inline-block !important;">Clear</button>
                   
           <button type="button"
-                  class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  data-signature-pad-target="saveButton">Save Initials</button>
+                  class="px-4 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-signature-pad-target="saveButton"
+                  data-action="click->signature-pad#save"
+                  style="display: inline-block !important;">Save Initials</button>
         </div>
+      </div>
+      
+      <!-- Debug button that uses controller action -->
+      <div class="text-center">
+        <button type="button" 
+                class="px-3 py-1 text-xs border border-gray-300 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                data-action="click->signature-modal#testDraw"
+                data-field-id="initialsCanvas">
+          Test Draw (Debug)
+        </button>
       </div>
     </div>
     
@@ -78,14 +144,14 @@
       <form data-action="submit->field-signing#textComplete">
         <div class="mb-4">
           <input type="text" 
-                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                 class="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                  placeholder="Enter your text here" 
                  required>
         </div>
         
         <div class="flex justify-end">
           <button type="submit" 
-                  class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  class="px-5 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700">
             Save Text
           </button>
         </div>
@@ -102,17 +168,20 @@
       <form data-action="submit->field-signing#dateComplete">
         <div class="mb-4">
           <input type="date" 
-                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                 class="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                  required>
         </div>
         
         <div class="flex justify-end">
           <button type="submit" 
-                  class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  class="px-5 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700">
             Save Date
           </button>
         </div>
       </form>
     </div>
   </div>
-</div> 
+</div>
+
+<!-- Separate backdrop element -->
+<div data-signature-modal-target="backdrop" id="modalBackdrop" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[999]" style="display:none;"></div> 
