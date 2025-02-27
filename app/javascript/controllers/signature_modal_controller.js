@@ -153,179 +153,179 @@ export default class extends Controller {
   }
   
   open(event) {
-    // Get field type - either from event or parameter
-    let fieldType;
+    console.log("OPEN METHOD CALLED", event);
     
-    if (typeof event === 'string') {
-      fieldType = event;
-    } else if (event?.currentTarget?.dataset?.fieldType) {
-      fieldType = event.currentTarget.dataset.fieldType;
-      event.preventDefault();
-      event.stopPropagation();
-    } else if (event?.detail?.fieldType) {
-      fieldType = event.detail.fieldType;
-    } else {
-      console.error("Cannot determine field type for modal");
-      return;
-    }
-    
-    console.log("Opening modal for field type:", fieldType);
-    
-    // Ensure PDF viewer loading element exists to prevent errors
-    this.ensurePdfViewerElements();
-    
-    // Show backdrop - CRITICAL: ensure it's visible with proper z-index
-    if (this.hasBackdropTarget) {
-      this.backdropTarget.classList.remove('hidden');
-      this.backdropTarget.style.display = 'block';
-      this.backdropTarget.style.zIndex = '999';
-      this.backdropTarget.style.opacity = '0.75';
-      this.backdropTarget.style.backgroundColor = '#000000';
-    }
-    
-    // Show modal with proper z-index
-    this.modalTarget.classList.remove('hidden');
-    this.modalTarget.style.display = 'flex';
-    this.modalTarget.style.zIndex = '1000';
-    
-    // Show correct content
-    const modalContents = this.modalTarget.querySelectorAll('.modal-content');
-    modalContents.forEach(content => {
-      content.classList.add('hidden');
-      content.style.display = 'none';
-    });
-    
-    const targetContent = this.modalTarget.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
-    if (targetContent) {
-      targetContent.classList.remove('hidden');
-      targetContent.style.display = 'block';
+    try {
+      // Determine the field type from the event
+      let fieldType = null;
       
-      // Make sure buttons are visible
-      const buttonContainer = targetContent.querySelector('[data-signature-modal-target="buttonContainer"]');
-      if (buttonContainer) {
-        buttonContainer.classList.remove('hidden');
-        buttonContainer.style.display = 'flex !important';
-        // Force show all buttons
-        buttonContainer.querySelectorAll('button').forEach(button => {
-          button.style.display = 'inline-block !important';
-        });
+      // Handle different types of events to get the field type
+      if (typeof event === 'string') {
+        // Direct string provided (e.g., "signature" or "initials")
+        fieldType = event;
+      } else if (event && event.target) {
+        // Event with target (clicked element)
+        if (event.target.dataset && event.target.dataset.fieldType) {
+          fieldType = event.target.dataset.fieldType;
+        } else if (event.target.closest) {
+          // Try to find closest element with field-type data attribute
+          const fieldElement = event.target.closest('[data-field-type]');
+          if (fieldElement) {
+            fieldType = fieldElement.dataset.fieldType;
+          }
+        }
+      } else if (event && event.detail && event.detail.fieldType) {
+        // Custom event with fieldType in detail
+        fieldType = event.detail.fieldType;
       }
-    }
-    
-    // Initialize canvas for signature/initials
-    if (fieldType === 'signature' || fieldType === 'initials') {
-      // Store current field type for reference
-      this.currentFieldType = fieldType;
+      
+      console.log("Field type determined:", fieldType);
+      this.fieldType = fieldType; // Store for later reference
       
       // Get the current field ID
-      if (event && event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.fieldId) {
-        window.currentFieldId = event.currentTarget.dataset.fieldId;
-        console.log("Setting current field ID:", window.currentFieldId);
+      let currentFieldId = null;
+      if (event && event.target && event.target.dataset && event.target.dataset.fieldId) {
+        currentFieldId = event.target.dataset.fieldId;
       } else if (event && event.detail && event.detail.fieldId) {
-        window.currentFieldId = event.detail.fieldId;
-        console.log("Setting current field ID from event detail:", window.currentFieldId);
+        currentFieldId = event.detail.fieldId;
+      } else if (event && event.target && event.target.closest) {
+        const fieldElement = event.target.closest('[data-field-id]');
+        if (fieldElement) {
+          currentFieldId = fieldElement.dataset.fieldId;
+        }
+      }
+      console.log("Current field ID:", currentFieldId);
+      this.currentFieldId = currentFieldId;
+      
+      // Find the correct container and canvas based on field type
+      const containerSelector = fieldType === 'signature' ? 'signatureContainer' : 'initialsContainer';
+      const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+      
+      // Show the modal
+      if (this.hasModalTarget) {
+        this.modalTarget.classList.remove('hidden');
+        this.modalTarget.style.display = 'flex';
+        console.log("Modal displayed:", this.modalTarget);
       }
       
-      setTimeout(() => {
-        const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
-        const canvas = document.getElementById(canvasId);
-        
-        if (canvas) {
-          // CRITICAL: Store canvas reference
-          this.currentCanvas = canvas;
-          
-          // CRITICAL: Set canvas properties for drawing correctly
-          console.log("Setting critical canvas properties for drawing");
-          canvas.style.zIndex = '1002';
-          canvas.style.touchAction = 'none';
-          canvas.style.pointerEvents = 'auto';
-          canvas.style.position = 'absolute';
-          canvas.style.userSelect = 'none';
-          canvas.style.webkitUserSelect = 'none';
-          canvas.style.cursor = 'crosshair';
-          
-          // Fix canvas size based on container
-          const container = canvas.parentElement;
-          const rect = container.getBoundingClientRect();
-          const ratio = Math.max(window.devicePixelRatio || 1, 2);
-          
-          // Clear console to help with debugging
-          console.log("Canvas container dimensions:", {
-            width: rect.width,
-            height: rect.height
-          });
-          
-          // Set CSS display size
-          canvas.style.width = '100%';
-          canvas.style.height = '100%';
-          
-          // Set canvas actual size (high resolution)
-          canvas.width = rect.width * ratio;
-          canvas.height = rect.height * ratio;
-          
-          // Scale context for retina display
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.scale(ratio, ratio);
-            ctx.fillStyle = "white";
-            ctx.fillRect(0, 0, canvas.width / ratio, canvas.height / ratio);
-            
-            // Draw faint guide lines to help with drawing
-            ctx.strokeStyle = 'rgba(200,200,200,0.3)';
-            ctx.lineWidth = 0.5;
-            
-            // Draw signature guide line
-            if (fieldType === 'signature') {
-              const height = canvas.height / ratio;
-              const width = canvas.width / ratio;
-              const lineY = height * 0.65;
-              
-              ctx.beginPath();
-              ctx.moveTo(width * 0.1, lineY);
-              ctx.lineTo(width * 0.9, lineY);
-              ctx.stroke();
-            }
-            
-            // Reset style
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-          }
-          
-          // CRITICAL: Force drawing to work by directly attaching event listeners
-          this.setupDirectDrawingHandlers(canvas);
-          
-          // Force controller initialization as backup
-          const containerTarget = fieldType === 'signature' ? 
-            this.signatureContainerTarget : this.initialsContainerTarget;
-          
-          if (containerTarget) {
-            // Try to get the controller instance
-            const padController = containerTarget.querySelector('[data-controller="signature-pad"]')?.__stimulusController;
-            
-            if (padController) {
-              console.log("Found signature pad controller, forcing initialization");
-              if (typeof padController.initializeSignaturePad === 'function') {
-                padController.initializeSignaturePad();
-              }
-            }
-          }
-          
-          // Draw test pattern after a short delay
-          setTimeout(() => this.testDraw(canvasId), 200);
-        }
-      }, 100);
-    }
-    
-    // Pause PDF rendering
-    document.dispatchEvent(new CustomEvent('pdf-viewer:pause'));
-    
-    // Check initial canvas content after modal is open
-    setTimeout(() => {
-      const visibleCanvas = this.element.querySelector('canvas:not([style*="display: none"])');
-      if (visibleCanvas) {
-        this.checkCanvasContentAndUpdateButton(visibleCanvas);
+      // Show the backdrop
+      if (this.hasBackdropTarget) {
+        this.backdropTarget.classList.remove('hidden');
+        this.backdropTarget.style.display = 'block';
+        console.log("Backdrop displayed");
       }
-    }, 200);
+      
+      // Hide all containers first
+      const containers = this.element.querySelectorAll('.modal-content');
+      containers.forEach(container => {
+        container.classList.add('hidden');
+        container.style.display = 'none';
+      });
+      
+      // Show the appropriate container
+      if (this[containerSelector + 'Target']) {
+        this[containerSelector + 'Target'].classList.remove('hidden');
+        this[containerSelector + 'Target'].style.display = 'block';
+        console.log(`Container ${containerSelector} displayed`);
+      }
+      
+      // CRITICAL: Make sure button container is displayed
+      if (this.hasButtonContainerTarget) {
+        this.buttonContainerTargets.forEach(container => {
+          container.style.display = 'flex';
+          console.log("Button container displayed");
+        });
+      }
+      
+      // Find canvas
+      let canvas = document.getElementById(canvasId);
+      if (!canvas) {
+        console.error(`Canvas not found with ID: ${canvasId}`);
+        // Try to find canvas via target
+        if (this.hasCanvasTarget) {
+          canvas = this.canvasTargets.find(c => c.id === canvasId);
+          console.log("Canvas found via target:", canvas);
+        }
+      }
+      
+      if (!canvas) {
+        console.error("Could not find canvas element");
+        return;
+      }
+      
+      console.log("Using canvas:", canvas.id);
+      
+      // CRITICAL: Ensure canvas is properly styled and sized
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      
+      // Set canvas display dimensions (CSS)
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.position = 'absolute';
+      canvas.style.left = '0';
+      canvas.style.top = '0';
+      canvas.style.zIndex = '1002';
+      
+      // Set pointer events and touch action
+      canvas.style.pointerEvents = 'auto'; // CRITICAL
+      canvas.style.touchAction = 'none';  // CRITICAL for touch devices
+      canvas.style.userSelect = 'none';   // Prevent text selection
+      canvas.style.cursor = 'crosshair';  // Show drawing cursor
+      
+      // Set canvas actual size in pixels
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      console.log(`Canvas sized: ${canvas.width}x${canvas.height} (display: ${rect.width}x${rect.height})`);
+      
+      // Clear canvas to white
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        // Scale context for high DPI displays
+        ctx.scale(dpr, dpr);
+        
+        // Clear to white
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+        
+        // Draw a subtle guide line
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.05)";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(20, rect.height / 2);
+        ctx.lineTo(rect.width - 20, rect.height / 2);
+        ctx.stroke();
+        
+        // Reset styles
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "#000000";
+      }
+      
+      // Store canvas reference
+      this.currentCanvas = canvas;
+      
+      // IMMEDIATELY set up drawing handlers - no delays
+      console.log("Setting up direct drawing handlers immediately");
+      this.setupDirectDrawingHandlers(canvas);
+      
+      // Setup button handlers too
+      this.setupButtonHandlers(canvas);
+      
+      // Initialize the save button state (disabled)
+      this.disableSaveButton();
+      
+      // Check canvas content after a delay to update button state
+      setTimeout(() => this.checkCanvasContentAndUpdateButton(canvas), 200);
+      
+      console.log("Modal and canvas initialization complete - should be ready for drawing");
+      
+      return canvas;
+    } catch (error) {
+      console.error("Error in open method:", error);
+    }
   }
   
   // Add direct drawing fallback functionality
@@ -335,8 +335,8 @@ export default class extends Controller {
       console.error("Invalid canvas element provided to setupDirectDrawingHandlers:", canvas);
       
       // Try to find the canvas if it wasn't provided correctly
-      if (this.currentFieldType) {
-        const canvasId = this.currentFieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+      if (this.fieldType) {
+        const canvasId = this.fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
         canvas = document.getElementById(canvasId);
         
         if (!canvas) {
@@ -358,6 +358,9 @@ export default class extends Controller {
     
     console.log("Setting up direct drawing handlers for canvas:", canvas.id);
     
+    // Clean up any existing handlers
+    this.cleanupCanvasEventListeners(canvas);
+    
     // Initialize drawing state
     const drawingState = {
       isDrawing: false,
@@ -372,8 +375,15 @@ export default class extends Controller {
       return;
     }
     
+    // CRITICAL: Set canvas properties for drawing
+    canvas.style.pointerEvents = 'auto';
+    canvas.style.touchAction = 'none';
+    canvas.style.userSelect = 'none'; // Prevent text selection
+    canvas.style.webkitUserSelect = 'none'; // For Safari
+    canvas.style.cursor = 'crosshair';
+    
     // Set default drawing styles
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#000000";
@@ -408,9 +418,12 @@ export default class extends Controller {
     
     // Drawing function
     const draw = (event) => {
-      if (!drawingState.isDrawing) return;
+      if (!drawingState.isDrawing) {
+        console.log("Not drawing - ignoring move event", event.type);
+        return;
+      }
       
-      // Prevent default behavior to avoid issues
+      // Prevent default browser behavior
       event.preventDefault();
       event.stopPropagation();
       
@@ -420,6 +433,9 @@ export default class extends Controller {
       const ratio = window.devicePixelRatio || 1;
       const x = coords.x / ratio;
       const y = coords.y / ratio;
+      
+      // CRITICAL DEBUG: Log the drawing coordinates each time
+      console.log(`Drawing from (${drawingState.lastX.toFixed(1)}, ${drawingState.lastY.toFixed(1)}) to (${x.toFixed(1)}, ${y.toFixed(1)})`);
       
       ctx.beginPath();
       ctx.moveTo(drawingState.lastX, drawingState.lastY);
@@ -430,103 +446,161 @@ export default class extends Controller {
       drawingState.lastX = x;
       drawingState.lastY = y;
       
-      // Enable save button since drawing occurred
-      this.enableSaveButton();
-      
-      // After drawing, check if canvas has content
+      // Update save button after drawing
       this.checkCanvasContentAndUpdateButton(canvas);
+      
+      // Return false to ensure event doesn't propagate further
+      return false;
     };
     
     // Start drawing
     const startDrawing = (event) => {
-      console.log("Starting drawing on canvas:", canvas.id, "Event type:", event.type);
+      // Use setTimeout to ensure this executes after any other possible handlers
+      setTimeout(() => {
+        console.log("========= STARTING DRAWING =========");
+        console.log(`Start drawing event: ${event.type} on canvas ${canvas.id}`);
+        console.log("Canvas ready state:", canvas.getAttribute('data-drawing-ready'));
+        console.log("Canvas style:", canvas.getAttribute('style'));
+        console.log("Canvas dimensions:", {
+          width: canvas.width,
+          height: canvas.height,
+          clientWidth: canvas.clientWidth,
+          clientHeight: canvas.clientHeight
+        });
+        
+        // Prevent any default behaviors
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const coords = getCoordinates(event, canvas);
+        
+        // Normalize coordinates for device pixel ratio
+        const ratio = window.devicePixelRatio || 1;
+        const x = coords.x / ratio;
+        const y = coords.y / ratio;
+        
+        console.log(`Starting point: (${x.toFixed(1)}, ${y.toFixed(1)})`);
+        
+        // Set drawing state
+        drawingState.isDrawing = true;
+        drawingState.lastX = x;
+        drawingState.lastY = y;
+        
+        // Draw a single point to ensure even a single click is registered
+        ctx.beginPath();
+        ctx.arc(x, y, 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // For pointer events, set capture to ensure all move events go to canvas
+        if (event.type === 'pointerdown' && typeof canvas.setPointerCapture === 'function') {
+          try {
+            canvas.setPointerCapture(event.pointerId);
+            console.log("Pointer capture set for pointerId:", event.pointerId);
+          } catch (e) {
+            console.error("Error setting pointer capture:", e);
+          }
+        }
+        
+        // Add all possible document-level event handlers
+        console.log("Adding document-level event handlers");
+        
+        // Use all available event types for maximum compatibility
+        document.addEventListener('mousemove', draw, { capture: true, passive: false });
+        document.addEventListener('touchmove', draw, { capture: true, passive: false });
+        document.addEventListener('pointermove', draw, { capture: true, passive: false });
+        
+        document.addEventListener('mouseup', stopDrawing, { capture: true });
+        document.addEventListener('touchend', stopDrawing, { capture: true });
+        document.addEventListener('touchcancel', stopDrawing, { capture: true });
+        document.addEventListener('pointerup', stopDrawing, { capture: true });
+        document.addEventListener('pointercancel', stopDrawing, { capture: true });
+        
+        // Also add direct handlers to canvas
+        canvas.addEventListener('mousemove', draw, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('pointermove', draw, { passive: false });
+        
+        // Update save button state
+        this.checkCanvasContentAndUpdateButton(canvas);
+        
+        // Draw a test dot in the corner to verify drawing works
+        ctx.fillStyle = 'rgba(0,0,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(10, 10, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'black';
+        
+        console.log("Drawing state initialized and handlers attached");
+        console.log("====================================");
+      }, 0);
       
-      // Prevent default behavior to avoid browser handling
+      // Prevent default and stop propagation
       event.preventDefault();
       event.stopPropagation();
-      
-      const coords = getCoordinates(event, canvas);
-      
-      // Normalize coordinates for device pixel ratio
-      const ratio = window.devicePixelRatio || 1;
-      const x = coords.x / ratio;
-      const y = coords.y / ratio;
-      
-      drawingState.isDrawing = true;
-      drawingState.lastX = x;
-      drawingState.lastY = y;
-      
-      // Draw a single point to ensure even a single click is registered
-      ctx.beginPath();
-      ctx.arc(x, y, 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // For pointer events, set capture to ensure all move events go to canvas
-      if (event.type === 'pointerdown') {
-        console.log("Setting pointer capture for better drawing");
-        try {
-          canvas.setPointerCapture(event.pointerId);
-        } catch (e) {
-          console.error("Error setting pointer capture:", e);
-        }
-      }
-      
-      // Store handlers in global object for later cleanup
-      if (!window._canvasEventHandlers) {
-        window._canvasEventHandlers = {};
-      }
-      window._canvasEventHandlers[canvas.id] = {
-        draw: draw,
-        stopDrawing: stopDrawing
-      };
-      
-      // Add move and up handlers directly to document to handle cases when moving outside of canvas
-      if (event.type === 'mousedown') {
-        document.addEventListener('mousemove', draw);
-        document.addEventListener('mouseup', stopDrawing);
-      } else if (event.type === 'touchstart') {
-        document.addEventListener('touchmove', draw, { passive: false });
-        document.addEventListener('touchend', stopDrawing);
-      } else if (event.type === 'pointerdown') {
-        document.addEventListener('pointermove', draw);
-        document.addEventListener('pointerup', stopDrawing);
-      }
-      
-      // Start checking for content after initial dot
-      this.checkCanvasContentAndUpdateButton(canvas);
+      return false;
     };
     
     // Stop drawing
     const stopDrawing = (event) => {
-      if (!drawingState.isDrawing) return;
+      if (!drawingState.isDrawing) {
+        console.log("Not currently drawing - ignoring stop event");
+        return;
+      }
       
+      console.log("==== STOPPING DRAWING ====");
+      console.log("Stop drawing event type:", event ? event.type : "no event");
       drawingState.isDrawing = false;
       
-      // Release pointer capture if needed
-      if (event && event.type === 'pointerup' && event.pointerId) {
+      // Release pointer capture if applicable
+      if (event && event.type === 'pointerup' && event.pointerId !== undefined && typeof canvas.releasePointerCapture === 'function') {
         try {
           canvas.releasePointerCapture(event.pointerId);
+          console.log("Pointer capture released for pointerId:", event.pointerId);
         } catch (e) {
-          console.log("Error releasing pointer capture:", e);
+          console.error("Error releasing pointer capture:", e);
         }
       }
       
-      // Remove document-level handlers
-      if (event) {
-        if (event.type === 'mouseup') {
-          document.removeEventListener('mousemove', draw);
-          document.removeEventListener('mouseup', stopDrawing);
-        } else if (event.type === 'touchend') {
-          document.removeEventListener('touchmove', draw);
-          document.removeEventListener('touchend', stopDrawing);
-        } else if (event.type === 'pointerup') {
-          document.removeEventListener('pointermove', draw);
-          document.removeEventListener('pointerup', stopDrawing);
-        }
-      }
+      // Verbose cleanup of ALL possible event listeners to avoid any leaks
+      console.log("Removing ALL document-level event handlers");
       
-      // Final check for content when drawing stops
+      // Mouse events
+      document.removeEventListener('mousemove', draw, { capture: true });
+      document.removeEventListener('mousemove', draw, false);
+      document.removeEventListener('mouseup', stopDrawing, { capture: true });
+      document.removeEventListener('mouseup', stopDrawing, false);
+      
+      // Touch events
+      document.removeEventListener('touchmove', draw, { capture: true, passive: false });
+      document.removeEventListener('touchmove', draw, { capture: true });
+      document.removeEventListener('touchmove', draw, false);
+      document.removeEventListener('touchend', stopDrawing, { capture: true });
+      document.removeEventListener('touchend', stopDrawing, false);
+      document.removeEventListener('touchcancel', stopDrawing, { capture: true });
+      document.removeEventListener('touchcancel', stopDrawing, false);
+      
+      // Pointer events
+      document.removeEventListener('pointermove', draw, { capture: true, passive: false });
+      document.removeEventListener('pointermove', draw, { capture: true });
+      document.removeEventListener('pointermove', draw, false);
+      document.removeEventListener('pointerup', stopDrawing, { capture: true });
+      document.removeEventListener('pointerup', stopDrawing, false);
+      document.removeEventListener('pointercancel', stopDrawing, { capture: true });
+      document.removeEventListener('pointercancel', stopDrawing, false);
+      
+      // Canvas-specific event listeners
+      console.log("Removing canvas-level move handlers");
+      canvas.removeEventListener('mousemove', draw, { passive: false });
+      canvas.removeEventListener('mousemove', draw);
+      canvas.removeEventListener('touchmove', draw, { passive: false });
+      canvas.removeEventListener('touchmove', draw);
+      canvas.removeEventListener('pointermove', draw, { passive: false });
+      canvas.removeEventListener('pointermove', draw);
+      
+      // Update save button after drawing is complete
       this.checkCanvasContentAndUpdateButton(canvas);
+      console.log("Drawing stopped and event handlers removed");
+      console.log("====================================");
     };
     
     // Clear canvas
@@ -544,59 +618,57 @@ export default class extends Controller {
     // Make clear function available on canvas for other handlers
     canvas.clear = clearCanvas;
     
-    // CRITICAL: Remove existing handlers with direct references
-    if (window._canvasEventHandlers && window._canvasEventHandlers[canvas.id]) {
-      const oldHandlers = window._canvasEventHandlers[canvas.id];
-      document.removeEventListener('mousemove', oldHandlers.draw);
-      document.removeEventListener('mouseup', oldHandlers.stopDrawing);
-      document.removeEventListener('touchmove', oldHandlers.draw);
-      document.removeEventListener('touchend', oldHandlers.stopDrawing);
-      document.removeEventListener('pointermove', oldHandlers.draw);
-      document.removeEventListener('pointerup', oldHandlers.stopDrawing);
-    }
+    // CRITICAL: Remove all existing event listeners directly
+    canvas.removeEventListener("mousedown", startDrawing, true);
+    canvas.removeEventListener("mousedown", startDrawing, false);
+    canvas.removeEventListener("touchstart", startDrawing, true);
+    canvas.removeEventListener("touchstart", startDrawing, false);
+    canvas.removeEventListener("pointerdown", startDrawing, true);
+    canvas.removeEventListener("pointerdown", startDrawing, false);
     
-    // Remove existing handlers if any
-    canvas.removeEventListener("mousedown", startDrawing);
-    canvas.removeEventListener("mousemove", draw);
-    document.removeEventListener("mouseup", stopDrawing);
-    
-    canvas.removeEventListener("touchstart", startDrawing);
-    canvas.removeEventListener("touchmove", draw);
-    document.removeEventListener("touchend", stopDrawing);
-    
-    canvas.removeEventListener("pointerdown", startDrawing);
-    canvas.removeEventListener("pointermove", draw);
-    document.removeEventListener("pointerup", stopDrawing);
-    
-    // Set up event listeners for mouse events
-    canvas.addEventListener("mousedown", startDrawing);
-    
-    // Set up event listeners for touch events
-    canvas.addEventListener("touchstart", startDrawing, { passive: false });
-    
-    // Set up event listeners for pointer events (modern approach)
-    // CRITICAL: Make sure this has the highest priority
+    // Set up event listeners with both capturing and bubbling phase for maximum compatibility
+    canvas.addEventListener("mousedown", startDrawing, { capture: true });
+    canvas.addEventListener("touchstart", startDrawing, { capture: true, passive: false });
     canvas.addEventListener("pointerdown", startDrawing, { capture: true });
+    
+    // Also add in bubbling phase as backup
+    canvas.addEventListener("mousedown", startDrawing);
+    canvas.addEventListener("touchstart", startDrawing, { passive: false });
+    canvas.addEventListener("pointerdown", startDrawing);
     
     // Initial clear
     clearCanvas();
     
+    // Store handlers in global object for later cleanup
+    if (!window._canvasEventHandlers) {
+      window._canvasEventHandlers = {};
+    }
+    window._canvasEventHandlers[canvas.id] = {
+      draw: draw,
+      stopDrawing: stopDrawing,
+      startDrawing: startDrawing
+    };
+    
+    // Mark canvas as ready for drawing
+    canvas.setAttribute('data-drawing-ready', 'true');
+    console.log("Canvas is now ready for drawing:", canvas.id);
+    
+    // Do NOT draw a test pattern anymore - we want clean canvas
+    
     // Set up button handlers
     this.setupButtonHandlers(canvas);
     
-    console.log("Direct drawing handlers setup complete for canvas:", canvas.id);
-    
-    // Draw a test pattern to confirm setup worked
-    ctx.strokeStyle = "#0000FF";
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(50, 50);
-    ctx.stroke();
-    
-    ctx.strokeStyle = "#000000"; // Reset to black
-    
     // Store reference to canvas for global methods
     this.currentCanvas = canvas;
+    
+    // Draw a single dot in the corner to verify canvas is working
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.beginPath();
+    ctx.arc(5, 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    
+    return canvas;
   }
   
   close() {
@@ -702,147 +774,82 @@ export default class extends Controller {
   }
   
   // Debug method to test canvas
-  testDraw(canvasId) {
-    console.log("Received event:", canvasId?.type || canvasId);
+  testDraw(event) {
+    console.log("TEST DRAW CALLED", event ? event.type : "no event", this.fieldType);
     
-    let canvas = null;
-    
-    // Handle various input types
-    if (canvasId instanceof Event) {
-      // Handle special case for pointer events
-      if (canvasId.type && canvasId.type.includes('pointer')) {
-        console.log("Special handling for pointer event");
+    try {
+      let canvas = null;
+      
+      // Try to get canvas from event if it's a canvas element
+      if (event && event.target && event.target instanceof HTMLCanvasElement) {
+        canvas = event.target;
+      } 
+      // Try to find canvas in closest element if it's not directly on canvas
+      else if (event && event.target) {
+        canvas = event.target.closest('canvas');
+      }
+      
+      // If no canvas found and we know the field type, try to get it by ID
+      if (!canvas && this.fieldType) {
+        const canvasId = this.fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+        canvas = document.getElementById(canvasId);
+      }
+      
+      // Still no canvas, try current canvas or find any canvas in modal
+      if (!canvas) {
+        canvas = this.currentCanvas;
         
-        // First try to get the canvas from the event target
-        if (canvasId.target instanceof HTMLCanvasElement) {
-          canvas = canvasId.target;
-        } else {
-          // Try to find the closest canvas
-          canvas = canvasId.target.closest('canvas');
-        }
-        
-        // If still not found, use the current canvas
-        if (!canvas && this.currentCanvas) {
-          canvas = this.currentCanvas;
-        }
-        
-        // As a last resort, find the visible canvas in the modal
         if (!canvas) {
+          // Last resort - find any canvas in the visible modal content
           const visibleContent = this.modalTarget.querySelector('.modal-content:not(.hidden)');
           if (visibleContent) {
             canvas = visibleContent.querySelector('canvas');
-            console.log("Found canvas in active modal content:", canvas?.id);
-          }
-        }
-      } else if (canvasId.currentTarget && canvasId.currentTarget.dataset && canvasId.currentTarget.dataset.fieldId) {
-        // Using dataset.fieldId attribute from the debug buttons
-        canvasId = canvasId.currentTarget.dataset.fieldId;
-        canvas = document.getElementById(canvasId);
-      }
-    } else if (typeof canvasId === 'string') {
-      // Normal string ID
-      canvas = document.getElementById(canvasId);
-    } else if (canvasId instanceof HTMLCanvasElement) {
-      // Already a canvas element
-      canvas = canvasId;
-    }
-    
-    if (!canvas) {
-      console.error("Canvas not found from", canvasId);
-      
-      // Try one more time with current field type
-      if (this.currentFieldType) {
-        const fallbackId = this.currentFieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
-        canvas = document.getElementById(fallbackId);
-        if (canvas) {
-          console.log("Using fallback canvas by field type:", fallbackId);
-        }
-      }
-      
-      // Last resort - check for any canvas in the visible modal content
-      if (!canvas) {
-        const visibleContent = this.modalTarget.querySelector('.modal-content:not(.hidden)');
-        if (visibleContent) {
-          canvas = visibleContent.querySelector('canvas');
-          if (canvas) {
-            console.log("Found canvas in visible modal content:", canvas.id);
           }
         }
       }
       
       if (!canvas) {
+        console.error("TEST DRAW: Could not find canvas");
         return;
       }
-    }
-    
-    console.log("Found canvas:", canvas.id);
-    
-    try {
-      // Always make sure the canvas has the right properties set
+      
+      console.log("TEST DRAW using canvas:", canvas.id);
+      
+      // Instead of drawing a test pattern, just ensure the canvas is ready for drawing
+      // and redo the drawing handler setup if needed
+      
+      // Make sure canvas has the right properties
       canvas.style.pointerEvents = 'auto';
       canvas.style.touchAction = 'none';
+      canvas.style.userSelect = 'none';
       
-      // Fix canvas size for drawing
-      const ratio = window.devicePixelRatio || 1;
+      // Adjust canvas size if needed
+      const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      
-      // Only adjust dimensions if they're not already set
-      if (canvas.width < rect.width || canvas.height < rect.height) {
-        canvas.width = rect.width * ratio;
-        canvas.height = rect.height * ratio;
+      if (canvas.width !== rect.width * dpr) {
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
       }
       
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        console.error("Could not get drawing context for canvas");
-        return;
-      }
-      
-      // Clear existing drawings
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transformations
-      ctx.scale(ratio, ratio); // Scale for device pixel ratio
-      
-      // Set background to white if needed
-      ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, canvas.width / ratio, canvas.height / ratio);
-      
-      // Draw subtle diagonal line pattern
-      ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
-      ctx.lineWidth = 1;
-      
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(canvas.width / ratio / 3, canvas.height / ratio / 3);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(0, canvas.height / ratio);
-      ctx.lineTo(canvas.width / ratio / 3, canvas.height / ratio * 2/3);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(canvas.width / ratio, 0);
-      ctx.lineTo(canvas.width / ratio * 2/3, canvas.height / ratio / 3);
-      ctx.stroke();
-      
-      // Reset to default styles
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
-      console.log("Test drawing complete on canvas:", canvas.id);
-      
-      // Store reference to canvas for future use
-      this.currentCanvas = canvas;
-      
-      // Set up direct drawing handlers again to ensure everything works
+      // Refresher for drawing handlers - this reapplies all the event listeners
+      console.log("TEST DRAW: Refreshing drawing handlers");
       this.setupDirectDrawingHandlers(canvas);
       
-      // After drawing test pattern, check canvas content
+      // Check canvas content to update save button
       this.checkCanvasContentAndUpdateButton(canvas);
-    } catch (e) {
-      console.error("Error in test draw:", e);
+      
+      // Store canvas reference
+      this.currentCanvas = canvas;
+      
+      return true;
+    } catch (error) {
+      console.error("Error in testDraw:", error);
+      return false;
     }
   }
   
@@ -1151,5 +1158,39 @@ export default class extends Controller {
     } catch (error) {
       console.error("Error checking canvas content:", error);
     }
+  }
+
+  // Helper method to clean up existing event listeners
+  cleanupCanvasEventListeners(canvas) {
+    if (!canvas) return;
+    
+    console.log("Cleaning up existing event listeners for canvas:", canvas.id);
+    
+    // Remove existing handlers from global store
+    if (window._canvasEventHandlers && window._canvasEventHandlers[canvas.id]) {
+      const oldHandlers = window._canvasEventHandlers[canvas.id];
+      
+      // Remove document-level handlers
+      document.removeEventListener('mousemove', oldHandlers.draw);
+      document.removeEventListener('mouseup', oldHandlers.stopDrawing);
+      document.removeEventListener('touchmove', oldHandlers.draw);
+      document.removeEventListener('touchend', oldHandlers.stopDrawing);
+      document.removeEventListener('pointermove', oldHandlers.draw);
+      document.removeEventListener('pointerup', oldHandlers.stopDrawing);
+      
+      // Remove canvas-level start drawing handlers if they exist
+      if (oldHandlers.startDrawing) {
+        canvas.removeEventListener("mousedown", oldHandlers.startDrawing);
+        canvas.removeEventListener("touchstart", oldHandlers.startDrawing);
+        canvas.removeEventListener("pointerdown", oldHandlers.startDrawing);
+      }
+      
+      // Clear handlers from global store
+      delete window._canvasEventHandlers[canvas.id];
+    }
+    
+    // Important: Do NOT replace the canvas with a clone as it disconnects all our bindings
+    // and makes drawing impossible. Just return the original canvas.
+    return canvas;
   }
 } 
