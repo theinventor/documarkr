@@ -988,7 +988,7 @@ export default class extends Controller {
       console.log("DEBUG: PDF viewer element found:", pdfViewerElement);
       
       console.log("DEBUG: Getting stimulus controller from element");
-      const pdfViewerController = pdfViewerElement.__stimulusController;
+      let pdfViewerController = pdfViewerElement.__stimulusController;
       console.log("DEBUG: PDF viewer controller:", pdfViewerController);
       
       if (!pdfViewerController) {
@@ -998,20 +998,161 @@ export default class extends Controller {
         // Try alternative methods to get the controller
         if (window.Stimulus) {
           console.log("DEBUG: Attempting to get controller via Stimulus application");
-          const controller = window.Stimulus.getControllerForElementAndIdentifier(pdfViewerElement, "pdf-viewer");
-          if (controller) {
-            console.log("DEBUG: Found controller via Stimulus application:", controller);
-            if (controller.pdfInstance) {
-              console.log("DEBUG: PDF instance found in controller:", controller.pdfInstance);
-              this.processPdfDownload(controller.pdfInstance, button, originalText);
-              return;
-            }
-          }
+          pdfViewerController = window.Stimulus.getControllerForElementAndIdentifier(pdfViewerElement, "pdf-viewer");
+          console.log("DEBUG: Found controller via Stimulus application:", pdfViewerController);
         }
-        
+      }
+      
+      // Check if we have a controller now (either from __stimulusController or Stimulus.getControllerForElementAndIdentifier)
+      if (!pdfViewerController) {
+        console.error("DEBUG: PDF viewer controller not available after all attempts");
         throw new Error("PDF viewer controller not available");
       }
       
+      // Check if pages are rendered - a better indicator of PDF readiness than isLoading
+      const pageContainers = document.querySelectorAll('.pdf-page');
+      console.log(`DEBUG: Found ${pageContainers.length} rendered page containers`);
+      
+      // If the PDF viewer has pages (the PDF is visibly rendered)
+      // We can proceed even if isLoading is still true
+      if (pageContainers.length > 0) {
+        console.log("DEBUG: Pages already rendered, proceeding with PDF processing");
+        
+        // Even if isLoading is true, we can access the PDF document from the controller
+        // or directly from the rendered pages
+        
+        // Try different approaches to get the PDF instance
+        let pdfDoc = null;
+        
+        // Approach 1: Try to get it from the controller
+        if (pdfViewerController.pdfInstance) {
+          console.log("DEBUG: Using pdfInstance from controller");
+          pdfDoc = pdfViewerController.pdfInstance;
+        } 
+        // Approach 2: Try to access the PDF directly
+        else if (pdfViewerController.pdf) {
+          console.log("DEBUG: Using pdf property from controller");
+          pdfDoc = pdfViewerController.pdf;
+        }
+        // Approach 3: Try to infer PDF data from rendered pages
+        else {
+          console.log("DEBUG: No direct PDF instance found, using alternative approach");
+          
+          // For this fallback approach, we'll just use the field data without the PDF
+          // and rely on the server to merge the data with the PDF
+          pdfDoc = { 
+            numPages: pageContainers.length,
+            isAlternativeInstance: true
+          };
+        }
+        
+        console.log("DEBUG: PDF data object available, proceeding with download");
+        this.processPdfDownload(pdfDoc, button, originalText);
+        return;
+      }
+      
+      console.log("DEBUG: Checking if PDF is still loading:", pdfViewerController.isLoading);
+      
+      // If no pages are rendered yet and PDF is still loading, wait for it
+      if (pdfViewerController.isLoading || pageContainers.length === 0) {
+        console.log("DEBUG: PDF is still loading or no pages rendered, waiting for completion...");
+        
+        // Set up a listener for the 'pdf-viewer:loaded' event
+        const waitForPdfLoaded = () => {
+          return new Promise((resolve, reject) => {
+            // Maximum time to wait (in milliseconds)
+            const maxWaitTime = 30000; // 30 seconds (increased from 10)
+            
+            // Track the check interval
+            let intervalId = null;
+            
+            // Set a timeout to reject the promise if PDF doesn't load in time
+            const timeoutId = setTimeout(() => {
+              document.removeEventListener('pdf-viewer:loaded', onPdfLoaded);
+              if (intervalId) clearInterval(intervalId);
+              
+              // Before rejecting, check if we can still work with what we have
+              const lastChancePageContainers = document.querySelectorAll('.pdf-page');
+              if (lastChancePageContainers.length > 0) {
+                console.log(`DEBUG: Timeout reached but found ${lastChancePageContainers.length} rendered pages, proceeding anyway`);
+                resolve();
+              } else {
+                reject(new Error("PDF loading timeout - took too long to load"));
+              }
+            }, maxWaitTime);
+            
+            // Handler for the loaded event
+            const onPdfLoaded = () => {
+              console.log("DEBUG: PDF loaded event received");
+              clearTimeout(timeoutId);
+              if (intervalId) clearInterval(intervalId);
+              document.removeEventListener('pdf-viewer:loaded', onPdfLoaded);
+              resolve();
+            };
+            
+            // Check if the PDF is already loaded since the event might have fired
+            if (pdfViewerController.pdfInstance) {
+              console.log("DEBUG: PDF already loaded, no need to wait");
+              clearTimeout(timeoutId);
+              if (intervalId) clearInterval(intervalId);
+              resolve();
+              return;
+            }
+            
+            // Set up periodic checks for rendered pages
+            intervalId = setInterval(() => {
+              const currentPageContainers = document.querySelectorAll('.pdf-page');
+              console.log(`DEBUG: Checking for rendered pages... found ${currentPageContainers.length}`);
+              
+              if (currentPageContainers.length > 0) {
+                console.log("DEBUG: Pages have been rendered, proceeding");
+                clearTimeout(timeoutId);
+                clearInterval(intervalId);
+                document.removeEventListener('pdf-viewer:loaded', onPdfLoaded);
+                resolve();
+              }
+            }, 1000); // Check every second
+            
+            // Also listen for the loaded event
+            document.addEventListener('pdf-viewer:loaded', onPdfLoaded);
+          });
+        };
+        
+        // Wait for the PDF to load before continuing
+        waitForPdfLoaded()
+          .then(() => {
+            console.log("DEBUG: PDF loaded or pages rendered, continuing...");
+            
+            // Now try to get the PDF instance again
+            let pdfDoc = null;
+            
+            if (pdfViewerController.pdfInstance) {
+              console.log("DEBUG: PDF instance found after loading:", pdfViewerController.pdfInstance);
+              pdfDoc = pdfViewerController.pdfInstance;
+            } else {
+              // Fallback: Create a minimal PDF representation from page count
+              const renderedPages = document.querySelectorAll('.pdf-page');
+              console.log(`DEBUG: Creating fallback PDF representation from ${renderedPages.length} rendered pages`);
+              pdfDoc = { 
+                numPages: renderedPages.length,
+                isAlternativeInstance: true
+              };
+            }
+            
+            // Process the PDF
+            this.processPdfDownload(pdfDoc, button, originalText);
+          })
+          .catch(error => {
+            console.error("DEBUG: Error waiting for PDF to load:", error);
+            button.innerHTML = originalText;
+            button.disabled = false;
+            alert(`Failed to wait for PDF to load: ${error.message}. Please try refreshing the page before saving PDF.`);
+          });
+        
+        return; // Exit the method here as we're handling this asynchronously
+      }
+      
+      // Check for pdfInstance
       if (!pdfViewerController.pdfInstance) {
         console.error("DEBUG: PDF instance not found in controller");
         throw new Error("PDF viewer not properly initialized");
@@ -1037,6 +1178,11 @@ export default class extends Controller {
   processPdfDownload(pdfDoc, button, originalText) {
     console.log("DEBUG: Processing PDF download with pdfDoc:", pdfDoc);
     
+    // Check if we're using the alternative instance
+    if (pdfDoc.isAlternativeInstance) {
+      console.log("DEBUG: Using alternative PDF instance (fallback approach)");
+    }
+    
     // Import and use html2canvas for rendering fields
     console.log("DEBUG: Attempting to import html2canvas...");
     import('html2canvas').then(async ({ default: html2canvas }) => {
@@ -1045,7 +1191,11 @@ export default class extends Controller {
       // Collect data for the Node.js PDF.js service
       const documentData = {
         documentId: this.documentIdValue,
-        fields: []
+        fields: [],
+        pdfMetadata: {
+          numPages: pdfDoc.numPages || 0,
+          isAlternativeInstance: !!pdfDoc.isAlternativeInstance
+        }
       };
       console.log("DEBUG: Initialized documentData:", documentData);
       
@@ -1055,7 +1205,27 @@ export default class extends Controller {
         console.log("DEBUG: Processing field:", field);
         const fieldId = field.dataset.fieldId;
         const pageNumber = parseInt(field.dataset.page, 10);
-        const fieldType = field.dataset.fieldType;
+        
+        // Try to determine field type from multiple sources
+        let fieldType = field.dataset.fieldType;
+        
+        // If field type is undefined, try to infer it from class
+        if (!fieldType) {
+          if (field.classList.contains('signature-field')) {
+            fieldType = 'signature';
+          } else if (field.classList.contains('text-field')) {
+            fieldType = 'text';
+          } else if (field.classList.contains('date-field')) {
+            fieldType = 'date';
+          } else if (field.classList.contains('initials-field')) {
+            fieldType = 'initials';
+          } else {
+            // Default to text if we can't determine type
+            fieldType = 'text';
+          }
+          console.log(`DEBUG: Field type inferred from class: ${fieldType}`);
+        }
+        
         const xPosition = parseFloat(field.dataset.xPosition);
         const yPosition = parseFloat(field.dataset.yPosition);
         const width = parseFloat(field.dataset.width);
@@ -1086,8 +1256,70 @@ export default class extends Controller {
           }
         }
         
-        // Add field data to the collection
-        if (fieldValue) {
+        // If no value was found by the type-specific methods, try generic approaches
+        if (!fieldValue) {
+          // Try to find any text content
+          const textContent = field.textContent.trim();
+          if (textContent) {
+            fieldValue = textContent;
+            console.log("DEBUG: Generic text content found:", fieldValue);
+          }
+          
+          // Or try to find any images
+          if (!fieldValue) {
+            const img = field.querySelector('img');
+            if (img) {
+              fieldValue = img.src;
+              console.log("DEBUG: Generic image found:", fieldValue.substring(0, 50) + "...");
+            }
+          }
+        }
+        
+        // Try to capture field appearance even if no value detected
+        if (!fieldValue && field.dataset.completed === "true") {
+          console.log("DEBUG: Field is marked as completed but no value detected. Capturing field appearance.");
+          try {
+            // Attempt to capture the field's visual appearance
+            html2canvas(field).then(canvas => {
+              fieldValue = canvas.toDataURL();
+              console.log("DEBUG: Field appearance captured:", fieldValue.substring(0, 50) + "...");
+              
+              // Since this is async, we need to add the field here
+              documentData.fields.push({
+                id: fieldId,
+                pageNumber,
+                fieldType,
+                xPosition,
+                yPosition, 
+                width,
+                height,
+                value: fieldValue,
+                capturedFromAppearance: true
+              });
+            }).catch(err => {
+              console.error("DEBUG: Failed to capture field appearance:", err);
+            });
+          } catch (err) {
+            console.error("DEBUG: Error during field appearance capture:", err);
+          }
+        }
+        
+        // Add field metadata even if no value (can be useful for debugging)
+        if (!fieldValue && !field.dataset.completed) {
+          documentData.fields.push({
+            id: fieldId,
+            pageNumber,
+            fieldType,
+            xPosition,
+            yPosition, 
+            width,
+            height,
+            value: null,
+            metadata: field.dataset
+          });
+          console.log("DEBUG: Empty field added to documentData with metadata");
+        } else if (fieldValue) {
+          // Add field data to the collection
           documentData.fields.push({
             id: fieldId,
             pageNumber,
@@ -1100,7 +1332,7 @@ export default class extends Controller {
           });
           console.log("DEBUG: Field added to documentData");
         } else {
-          console.log("DEBUG: Field skipped (no value)");
+          console.log("DEBUG: Field skipped (no value and not completed)");
         }
       }
       
@@ -1120,96 +1352,489 @@ export default class extends Controller {
   // This will be implemented in the future
   async sendToNodeService(documentData, button, originalText) {
     console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
-    console.log("%cSENDING DATA TO NODE SERVICE", "color: green; font-weight: bold; font-size: 24px;");
+    console.log("%cGENERATING PDF", "color: green; font-weight: bold; font-size: 24px;");
     console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
     
     try {
-      console.log("DEBUG: Data to be sent to Node.js PDF.js service:", documentData);
+      console.log("DEBUG: Data to be used for PDF generation:", documentData);
       console.log("DEBUG: Document ID:", documentData.documentId);
       console.log("DEBUG: Number of fields:", documentData.fields.length);
       
-      // For now, we'll simulate a successful response
-      // In the future, this will be an actual API call to the Node.js service
-      
-      console.log("DEBUG: Creating JSON blob for download");
-      // Option 1: For temporary demo, download the JSON data
-      const jsonString = JSON.stringify(documentData, null, 2);
-      console.log("DEBUG: JSON string created, length:", jsonString.length);
-      
-      const jsonBlob = new Blob([jsonString], { type: 'application/json' });
-      console.log("DEBUG: JSON blob created, size:", jsonBlob.size);
-      
-      const filename = `document-${documentData.documentId}-fields.json`;
-      console.log("DEBUG: Downloading file with name:", filename);
-      
-      this.downloadFile(jsonBlob, filename);
-      
-      // Option 2: When the server endpoint is ready, send the data
-      /* 
-      const response = await fetch('/api/pdf-generation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-        },
-        body: JSON.stringify(documentData)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+      // Get the PDF data from the viewer
+      const pdfViewerElement = document.querySelector('[data-controller~="pdf-viewer"]');
+      if (!pdfViewerElement) {
+        throw new Error("PDF viewer element not found");
       }
       
-      const result = await response.json();
+      // Get the controller - try multiple approaches
+      let pdfViewerController = pdfViewerElement.__stimulusController;
       
-      if (result.pdfUrl) {
-        // If the server returns a URL to the generated PDF, redirect to it
-        window.open(result.pdfUrl, '_blank');
-      } else if (result.pdfData) {
-        // If the server returns the PDF data directly, download it
-        const pdfBlob = this.base64ToBlob(result.pdfData, 'application/pdf');
-        this.downloadFile(pdfBlob, `document-${documentData.documentId}.pdf`);
+      // If __stimulusController is not available, try Stimulus
+      if (!pdfViewerController && window.Stimulus) {
+        pdfViewerController = window.Stimulus.getControllerForElementAndIdentifier(pdfViewerElement, "pdf-viewer");
       }
-      */
       
-      // Show success message
-      console.log("DEBUG: All operations completed, showing success message");
-      alert('PDF data prepared successfully. In the future, this will generate a PDF using a Node.js service with PDF.js.');
+      // If still no controller, create a minimal fallback
+      if (!pdfViewerController) {
+        // Try to get the URL from the data attribute
+        // Try different attribute patterns as they can vary
+        const pdfUrl = pdfViewerElement.dataset.pdfViewerUrlValue || 
+                        pdfViewerElement.getAttribute('data-pdf-viewer-url-value') ||
+                        pdfViewerElement.dataset.urlValue ||
+                        pdfViewerElement.getAttribute('data-url-value');
+        
+        if (!pdfUrl) {
+          // Try to extract URL from the DOM or any visible PDF frame
+          const pdfFrame = document.querySelector('iframe[src*=".pdf"]');
+          const pdfObject = document.querySelector('object[data*=".pdf"]');
+          const pdfEmbed = document.querySelector('embed[src*=".pdf"]');
+          
+          const extractedUrl = pdfFrame?.src || pdfObject?.data || pdfEmbed?.src;
+          
+          if (!extractedUrl) {
+            // Try to find any URL in the HTML that looks like a PDF
+            const allLinks = document.querySelectorAll('a[href*=".pdf"]');
+            if (allLinks.length > 0) {
+              // Use the first PDF link found
+              const pdfLink = allLinks[0].href;
+              console.log(`DEBUG: Using PDF link found in document: ${pdfLink}`);
+              pdfViewerController = { urlValue: pdfLink };
+            } else {
+              throw new Error("Could not determine PDF URL from any source");
+            }
+          } else {
+            console.log(`DEBUG: Using PDF URL extracted from element: ${extractedUrl}`);
+            pdfViewerController = { urlValue: extractedUrl };
+          }
+        } else {
+          console.log(`DEBUG: Using fallback controller with URL from data attribute: ${pdfUrl}`);
+          pdfViewerController = { urlValue: pdfUrl };
+        }
+      }
+      
+      console.log("DEBUG: PDF viewer controller access successful");
+      
+      // Import PDF.js libraries
+      console.log("DEBUG: Importing PDF-lib...");
+      const { PDFDocument, rgb } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.esm.min.js');
+      console.log("DEBUG: PDF-lib imported successfully");
+      
+      // Get the source PDF data
+      console.log("DEBUG: Getting PDF data...");
+      const srcPdfBytes = await this.getPdfData(pdfViewerController);
+      console.log("DEBUG: PDF data retrieved, size:", srcPdfBytes.byteLength);
+      
+      // Create a new PDF document
+      console.log("DEBUG: Loading PDF document...");
+      const pdfDoc = await PDFDocument.load(srcPdfBytes);
+      const pages = pdfDoc.getPages();
+      console.log("DEBUG: PDF document loaded with", pages.length, "pages");
+      
+      // Process each field and add it to the PDF
+      console.log("DEBUG: Processing", documentData.fields.length, "fields");
+      for (const field of documentData.fields) {
+        if (!field.value) {
+          console.log("DEBUG: Skipping field with no value:", field.id);
+          continue;
+        }
+        
+        const pageIndex = field.pageNumber - 1;
+        if (pageIndex >= pages.length) {
+          console.warn(`Page ${field.pageNumber} does not exist in the PDF (max: ${pages.length})`);
+          continue;
+        }
+        
+        console.log(`DEBUG: Adding field ${field.id} (${field.fieldType}) to page ${field.pageNumber}`);
+        const page = pages[pageIndex];
+        const { width, height } = page.getSize();
+        
+        // Calculate position in PDF coordinates (bottom-left origin)
+        const x = (field.xPosition / 100) * width;
+        const y = height - ((field.yPosition / 100) * height);
+        
+        await this.addFieldToPdf(pdfDoc, page, field, x, y);
+      }
+      
+      // Generate PDF bytes
+      console.log("DEBUG: Saving PDF...");
+      const pdfBytes = await pdfDoc.save();
+      console.log("DEBUG: PDF saved, size:", pdfBytes.byteLength);
+      
+      // Create a blob from the PDF bytes
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      
+      // Generate a filename
+      const filename = `document_${documentData.documentId}_completed.pdf`;
+      
+      // Download the PDF
+      console.log("DEBUG: Downloading PDF as:", filename);
+      this.downloadFile(blob, filename);
+      
+      console.log("DEBUG: PDF generation complete");
     } catch (error) {
-      console.error("DEBUG: Error in sendToNodeService:", error);
-      alert(`Failed to generate PDF: ${error.message}`);
+      console.error("DEBUG: Error generating PDF:", error);
+      alert(`Failed to generate PDF: ${error.message}\n\nMore details in console.`);
     } finally {
       // Reset button state
-      console.log("DEBUG: Resetting button state");
       button.innerHTML = originalText;
       button.disabled = false;
-      console.log("DEBUG: Button reset complete");
+    }
+  }
+  
+  // Helper method to get PDF data from the viewer
+  async getPdfData(pdfViewerController) {
+    console.log("DEBUG: Getting PDF data with controller:", pdfViewerController);
+    
+    try {
+      // Try to access PDF.js document data if available
+      if (pdfViewerController.pdfInstance && pdfViewerController.pdfInstance._transport) {
+        console.log("DEBUG: Using PDF.js instance directly");
+        const data = await pdfViewerController.pdfInstance.getData();
+        return data.buffer;
+      } 
+      
+      // Try alternative PDF.js API paths
+      if (pdfViewerController.pdf && typeof pdfViewerController.pdf.getData === 'function') {
+        console.log("DEBUG: Using alternative PDF.js instance path");
+        const data = await pdfViewerController.pdf.getData();
+        return data.buffer;
+      }
+      
+      // If we can't get the direct PDF data, fetch the original URL
+      if (pdfViewerController.urlValue) {
+        console.log("DEBUG: Fetching PDF from URL:", pdfViewerController.urlValue);
+        const response = await fetch(pdfViewerController.urlValue);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+        }
+        
+        return await response.arrayBuffer();
+      }
+      
+      // If all fails, try to find the URL in the DOM
+      const pdfViewerElement = document.querySelector('[data-controller~="pdf-viewer"]');
+      if (pdfViewerElement) {
+        const urlValue = pdfViewerElement.dataset.pdfViewerUrlValue || 
+                        pdfViewerElement.getAttribute('data-pdf-viewer-url-value');
+        
+        if (urlValue) {
+          console.log("DEBUG: Fetching PDF from DOM-sourced URL:", urlValue);
+          const response = await fetch(urlValue);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+          }
+          
+          return await response.arrayBuffer();
+        }
+      }
+      
+      // Last resort - try to get the URL from an iframe
+      const pdfIframe = document.querySelector('iframe[src*=".pdf"]');
+      if (pdfIframe && pdfIframe.src) {
+        console.log("DEBUG: Fetching PDF from iframe src:", pdfIframe.src);
+        const response = await fetch(pdfIframe.src);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+        }
+        
+        return await response.arrayBuffer();
+      }
+      
+      throw new Error("Could not retrieve PDF data - no valid source found");
+    } catch (error) {
+      console.error("DEBUG: Error getting PDF data:", error);
+      throw error;
+    }
+  }
+  
+  // Helper method to add a field to PDF
+  async addFieldToPdf(pdfDoc, page, field, x, y) {
+    try {
+      console.log(`DEBUG: Adding field ${field.id} (${field.fieldType}) to PDF at position (${x}, ${y})`);
+      const fieldType = field.fieldType;
+      
+      if (fieldType === 'signature' || fieldType === 'initials') {
+        // Handle signature/initials (images)
+        if (field.value && field.value.startsWith('data:image')) {
+          console.log(`DEBUG: Processing ${fieldType} image...`);
+          
+          try {
+            // Extract base64 data
+            const imageData = field.value.split(',')[1];
+            if (!imageData) {
+              console.warn(`Invalid image data for field ${field.id}`);
+              return;
+            }
+            
+            // Create a binary array from the base64 data
+            let imageBytes;
+            try {
+              imageBytes = Uint8Array.from(atob(imageData), c => c.charCodeAt(0));
+              console.log(`DEBUG: Converted base64 to binary array, length: ${imageBytes.length}`);
+            } catch (error) {
+              console.error(`DEBUG: Error converting base64 to binary: ${error.message}`);
+              throw error;
+            }
+            
+            // Determine image type and create embedded image
+            let image;
+            
+            if (field.value.includes('image/png')) {
+              console.log(`DEBUG: Embedding PNG image...`);
+              image = await pdfDoc.embedPng(imageBytes);
+            } else if (field.value.includes('image/jpeg')) {
+              console.log(`DEBUG: Embedding JPEG image...`);
+              image = await pdfDoc.embedJpg(imageBytes);
+            } else {
+              console.log(`DEBUG: Unknown image format, converting to PNG...`);
+              // For other formats, convert to PNG using canvas
+              try {
+                // Create an image element to load the image data
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                  img.onload = resolve;
+                  img.onerror = reject;
+                  img.src = field.value;
+                });
+                
+                // Draw the image to a canvas to convert it
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                
+                // Get PNG data from canvas
+                const pngData = canvas.toDataURL('image/png').split(',')[1];
+                
+                // Convert to binary array
+                imageBytes = Uint8Array.from(atob(pngData), c => c.charCodeAt(0));
+                console.log(`DEBUG: Converted to PNG, data length: ${imageBytes.length}`);
+                
+                // Embed the PNG image
+                image = await pdfDoc.embedPng(imageBytes);
+              } catch (convError) {
+                console.error(`DEBUG: Error converting image: ${convError.message}`);
+                throw convError;
+              }
+            }
+            
+            // Calculate dimensions while maintaining aspect ratio
+            console.log(`DEBUG: Original image dimensions: ${image.width}x${image.height}`);
+            
+            // Apply scaling to make the signature reasonably sized
+            // Signatures are often very large in resolution but small in the PDF
+            const scaleFactor = fieldType === 'signature' ? 0.5 : 0.3;  // Scale signatures and initials differently
+            
+            // Use field dimensions if provided, or create reasonable defaults
+            const maxWidth = field.width ? parseFloat(field.width) * 2 : 150;  // Double the size of what's specified in field data
+            const maxHeight = field.height ? parseFloat(field.height) * 2 : 50;
+            
+            const aspectRatio = image.width / image.height;
+            
+            // Start with max width and calculate proportional height
+            let width = maxWidth * scaleFactor;
+            let height = width / aspectRatio;
+            
+            // If height is too large, constrain by height instead
+            if (height > maxHeight * scaleFactor) {
+              height = maxHeight * scaleFactor;
+              width = height * aspectRatio;
+            }
+            
+            console.log(`DEBUG: Computed dimensions for PDF: ${width}x${height}`);
+            
+            // Draw the image on the page, centering it on the target coordinates
+            page.drawImage(image, {
+              x: x - (width / 2),
+              y: y - (height / 2),
+              width,
+              height
+            });
+            
+            console.log(`DEBUG: Successfully added ${fieldType} image to PDF`);
+          } catch (signatureError) {
+            console.error(`DEBUG: Error processing signature/initials: ${signatureError.message}`);
+            
+            // Fall back to adding a text placeholder if the image fails
+            const { rgb } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.esm.min.js');
+            
+            page.drawText(fieldType === 'signature' ? '[Signature]' : '[Initials]', {
+              x: x - 30,
+              y: y,
+              size: 12,
+              color: rgb(0, 0, 0),
+            });
+          }
+        } else {
+          console.warn(`DEBUG: No valid ${fieldType} image data found for field ${field.id}`);
+        }
+      } else if (fieldType === 'text' || fieldType === 'date') {
+        // Handle text/date fields
+        console.log(`DEBUG: Adding ${fieldType} field with value: "${field.value}"`);
+        
+        // Import necessary modules
+        const { rgb, StandardFonts, Font } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.esm.min.js');
+        
+        // Get the standard font
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        
+        // Determine optimal font size based on field dimensions
+        let fontSize = 12;
+        if (field.width) {
+          // Adjust font size based on field width, but keep it reasonable
+          const fieldWidth = parseFloat(field.width);
+          fontSize = Math.max(10, Math.min(16, fieldWidth / 10));
+        }
+        
+        // For date fields, format the text if needed
+        let textValue = field.value;
+        if (fieldType === 'date' && field.value.includes('-')) {
+          // Format YYYY-MM-DD to something more readable
+          try {
+            const date = new Date(field.value);
+            textValue = date.toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric', 
+              year: 'numeric' 
+            });
+          } catch (e) {
+            console.warn(`DEBUG: Failed to format date: ${e.message}`);
+          }
+        }
+        
+        // Calculate text width to properly center it
+        const textWidth = helveticaFont.widthOfTextAtSize(textValue, fontSize);
+        
+        // Add text to the page
+        page.drawText(textValue, {
+          x: x - (textWidth / 2),  // Center text horizontally
+          y: y - (fontSize / 3),   // Slight adjustment to center vertically
+          size: fontSize,
+          font: helveticaFont,
+          color: rgb(0, 0, 0),
+          lineHeight: fontSize * 1.2,
+        });
+        
+        console.log(`DEBUG: Successfully added ${fieldType} to PDF`);
+      } else {
+        console.warn(`DEBUG: Unsupported field type: ${fieldType}`);
+      }
+    } catch (error) {
+      console.error(`DEBUG: Error adding field ${field.id} to PDF:`, error);
+      
+      // Try to add a text label as a fallback
+      try {
+        const { rgb } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.esm.min.js');
+        page.drawText(`[${field.fieldType || 'Field'}]`, {
+          x: x - 20,
+          y: y,
+          size: 10,
+          color: rgb(0.7, 0, 0),
+        });
+      } catch (fallbackError) {
+        console.error('Failed to add fallback field indicator:', fallbackError);
+      }
     }
   }
   
   // Helper method to download a file
   downloadFile(blob, filename) {
     console.log("DEBUG: downloadFile called with blob size:", blob.size, "and filename:", filename);
-    const url = window.URL.createObjectURL(blob);
-    console.log("DEBUG: Blob URL created:", url);
     
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    console.log("DEBUG: Download link created");
-    
-    document.body.appendChild(a);
-    console.log("DEBUG: Link appended to document");
-    
-    console.log("DEBUG: Triggering click on download link");
-    a.click();
-    
-    console.log("DEBUG: Removing link from document");
-    document.body.removeChild(a);
-    
-    console.log("DEBUG: Revoking blob URL");
-    window.URL.revokeObjectURL(url);
-    
-    console.log("DEBUG: Download process complete");
+    try {
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      console.log("DEBUG: Blob URL created:", url);
+      
+      // Try modern download approach first
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      console.log("DEBUG: Download link created");
+      
+      // Some browsers require the element to be in the DOM
+      document.body.appendChild(a);
+      console.log("DEBUG: Link appended to document");
+      
+      // Trigger click to start download
+      console.log("DEBUG: Triggering click on download link");
+      a.click();
+      
+      // Clean up
+      console.log("DEBUG: Removing link from document");
+      setTimeout(() => {
+        document.body.removeChild(a);
+        console.log("DEBUG: Revoking blob URL");
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      console.log("DEBUG: Download process initiated");
+      return true;
+    } catch (error) {
+      console.error("DEBUG: Error in primary download method:", error);
+      
+      // Fallback method using iframe
+      try {
+        console.log("DEBUG: Trying fallback download method (iframe)");
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        
+        const iframeDoc = iframe.contentWindow.document;
+        const url = window.URL.createObjectURL(blob);
+        
+        // Create a link in the iframe and click it
+        const a = iframeDoc.createElement('a');
+        a.href = url;
+        a.download = filename;
+        iframeDoc.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log("DEBUG: Fallback download method completed");
+        return true;
+      } catch (fallbackError) {
+        console.error("DEBUG: Error in fallback download method:", fallbackError);
+        
+        // Final fallback - open in new window
+        try {
+          console.log("DEBUG: Trying final fallback (new window)");
+          const url = window.URL.createObjectURL(blob);
+          const newWindow = window.open(url, '_blank');
+          
+          if (!newWindow) {
+            console.warn("DEBUG: New window was blocked. Alerting user with instructions.");
+            alert(`The PDF has been generated but couldn't be automatically downloaded. \n\nPlease change your browser settings to allow popups from this site, then try again.`);
+          } else {
+            console.log("DEBUG: PDF opened in new window");
+            
+            // Give the user instructions to save the PDF
+            alert(`Your PDF has been generated and opened in a new tab.\n\nPlease use your browser's "Save As" feature (often Ctrl+S or Cmd+S) to save the file to your computer.`);
+          }
+          
+          // Clean up the URL after a longer delay
+          setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 30000);
+          
+          return true;
+        } catch (finalError) {
+          console.error("DEBUG: All download methods failed:", finalError);
+          alert(`The PDF was generated successfully, but your browser couldn't download it automatically. \n\nPlease try again or contact support if the problem persists.`);
+          return false;
+        }
+      }
+    }
   }
   
   // Helper method to convert base64 to Blob
