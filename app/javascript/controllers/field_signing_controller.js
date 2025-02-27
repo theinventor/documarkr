@@ -303,180 +303,206 @@ export default class extends Controller {
       }
     }
     
-    // For signature and initials, open the modal
-    this.openSignatureModal(event);
+    // For signature and initials, open the modal with our updated method
+    if (fieldType === 'signature' || fieldType === 'initials') {
+      this.openSignatureModal(event);
+      event.stopPropagation();
+      return;
+    }
   }
   
   openSignatureModal(event) {
-    event.preventDefault();
-    event.stopPropagation();
+    console.log("Opening signature modal for field:", event.currentTarget.dataset.fieldId);
     
-    console.log("Opening signature modal");
+    // Store the current field for later use
+    this.currentFieldValue = event.currentTarget.dataset.fieldId;
     
-    const fieldElement = event.currentTarget;
-    const fieldId = fieldElement.dataset.fieldId;
-    const fieldType = fieldElement.dataset.fieldType;
+    // Also set a global variable as a fallback
+    window.currentFieldId = event.currentTarget.dataset.fieldId;
     
-    // Store the current field ID for reference
-    this.currentFieldValue = fieldId;
+    // First try to use the signature-modal controller
+    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
+    const modalController = signatureModalElement?.__stimulusController;
     
-    // Pause PDF rendering
-    document.dispatchEvent(new CustomEvent('pdf-viewer:pause'));
-    this.pdfPaused = true;
-    
-    // Perform a direct check to see if the modal exists
-    const directModalCheck = document.getElementById('signingModal');
-    if (!directModalCheck) {
-      console.error("Modal element not found using direct query selector!");
+    if (modalController && typeof modalController.open === 'function') {
+      // Determine the field type
+      const fieldType = event.currentTarget.dataset.fieldType;
+      console.log(`Using signature-modal controller to open modal for ${fieldType}`);
+      
+      // Open the modal with the correct field type
+      modalController.open({
+        currentTarget: {
+          dataset: {
+            fieldType: fieldType
+          }
+        },
+        preventDefault: () => {},
+        stopPropagation: () => {}
+      });
+      
       return;
     }
     
-    if (!this.hasModalTarget) {
-      console.error("Modal target not found!");
+    // Fallback to manual modal handling if the controller isn't available
+    console.log("Signature modal controller not found, using fallback approach");
+    
+    // Try to find the modal element directly instead of using modalTarget
+    const modal = document.querySelector('[data-controller="signature-modal"]');
+    
+    if (!modal) {
+      console.error("No modal element found with data-controller='signature-modal'! Check your HTML structure.");
       return;
     }
     
-    console.log("Modal target found:", this.modalTarget);
+    const fieldType = event.currentTarget.dataset.fieldType;
     
     // Show the modal
-    this.modalTarget.classList.remove('hidden');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
     
-    // Show corresponding content based on field type
-    const modalContents = this.modalTarget.querySelectorAll('.modal-content');
+    // Find and show the correct content type (signature or initials)
+    const modalContents = modal.querySelectorAll('.modal-content');
     modalContents.forEach(content => {
       content.classList.add('hidden');
+      content.style.display = 'none';
     });
     
-    const targetContent = this.modalTarget.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
+    // Show the right content
+    const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
     if (targetContent) {
       targetContent.classList.remove('hidden');
+      targetContent.style.display = 'block';
     } else {
-      console.error(`Modal content for field type "${fieldType}" not found!`);
+      console.error(`No modal content found for field type: ${fieldType}`);
     }
     
-    // Show the backdrop
-    const backdrop = document.getElementById('modalBackdrop');
+    // Show backdrop (if available)
+    const backdrop = document.querySelector('#modalBackdrop');
     if (backdrop) {
       backdrop.classList.remove('hidden');
+      backdrop.style.display = 'block';
+      backdrop.style.zIndex = '999';
+      backdrop.style.opacity = '0.75';
+      backdrop.style.backgroundColor = '#000000';
     }
     
-    // For signature/initials, initialize the canvas
-    if (fieldType === 'signature' || fieldType === 'initials') {
-      setTimeout(() => {
-        const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
-        const canvas = document.getElementById(canvasId);
-        
-        if (canvas) {
-          console.log(`Initializing ${fieldType} canvas`);
-          
-          // Clear any previous drawings
-          const context = canvas.getContext('2d');
-          context.clearRect(0, 0, canvas.width, canvas.height);
-          
-          // Set proper dimensions
-          const ratio = Math.max(window.devicePixelRatio || 1, 2);
-          const parentWidth = canvas.parentElement.offsetWidth;
-          canvas.width = parentWidth * ratio;
-          canvas.height = canvas.offsetHeight * ratio;
-          
-          // Adjust context scale
-          context.scale(ratio, ratio);
-          context.lineWidth = 3;
-          context.lineCap = 'round';
-          context.lineJoin = 'round';
-          context.strokeStyle = '#000000';
+    // Try to initialize signature pad through the controller or fallback
+    setTimeout(() => {
+      const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+      const canvas = document.getElementById(canvasId);
+      
+      if (canvas) {
+        // Force controller initialization through test draw
+        if (modal.__stimulusController && typeof modal.__stimulusController.testDraw === 'function') {
+          modal.__stimulusController.testDraw(canvasId);
         }
-      }, 100);
-    }
+      }
+    }, 100);
   }
   
   closeModal() {
     console.log("Closing modal using controller method");
     
-    // Use the safer window helper function if available
-    if (window.closeSigningModal) {
-      window.closeSigningModal();
-      return;
+    // Find the modal controller instead of directly manipulating DOM
+    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
+    const modalController = signatureModalElement?.__stimulusController;
+    
+    if (modalController && typeof modalController.close === 'function') {
+      // Use the controller's close method
+      console.log("Using signature-modal controller to close modal");
+      modalController.close();
+    } else {
+      // Fallback to direct modal manipulation if controller not initialized
+      console.log("Falling back to direct modal manipulation");
+      
+      // Try to find the modal element directly
+      const modal = document.querySelector('[data-controller="signature-modal"]');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+        
+        // Hide the backdrop
+        const backdrop = document.getElementById('modalBackdrop');
+        if (backdrop) {
+          backdrop.classList.add('hidden');
+          backdrop.style.display = 'none';
+        }
+      } else {
+        console.error("No modal element found for closing!");
+      }
     }
     
-    // Otherwise, fallback to our own implementation
-    if (this.hasModalTarget) {
-      this.modalTarget.classList.add('hidden');
-      
-      // Hide the backdrop
-      const backdrop = document.getElementById('modalBackdrop');
-      if (backdrop) {
-        backdrop.classList.add('hidden');
-      }
-      
-      // Resume PDF rendering
-      document.dispatchEvent(new CustomEvent('pdf-viewer:resume'));
-      this.pdfPaused = false;
-      
-      // Ensure body is visible and scrollable
-      document.body.style.removeProperty('overflow');
-      document.body.style.removeProperty('display');
-      document.body.style.display = 'block';
-      
-      // Remove any full-screen overlays
-      document.querySelectorAll('.fixed.inset-0').forEach(el => {
-        if (el !== this.modalTarget && el !== backdrop) {
-          if (el.classList.contains('hidden')) return;
-          el.classList.add('hidden');
-        }
-      });
-      
-      // Force a redraw to ensure body becomes visible
-      setTimeout(() => {
-        document.body.style.opacity = 0.99;
-        setTimeout(() => document.body.style.opacity = 1, 10);
-      }, 10);
-      
-      // Reset current field value
-      this.currentFieldValue = '';
-    } else {
-      console.error("Modal target not found in closeModal");
-    }
+    // Reset current field value
+    this.currentFieldValue = '';
   }
   
   initializeSignaturePad() {
-    // The signature pad controller should handle initialization
-    // We just wait for it to be ready
-    if (this.hasSignatureCanvasTarget) {
-      // Focus on drawing area
-      this.signatureCanvasTarget.focus()
+    console.log("Initialize signature pad called - delegating to signature modal controller");
+    
+    // Find the signature modal controller
+    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
+    
+    if (signatureModalElement) {
+      // If we have a controller instance, use it to initialize the canvas
+      const controller = signatureModalElement.__stimulusController;
+      if (controller && typeof controller.testDraw === 'function') {
+        // Get the current field type to determine which canvas to use
+        const field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue || f.dataset.fieldId === `field-${this.currentFieldValue}`);
+        if (field) {
+          const fieldType = field.dataset.fieldType;
+          const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+          controller.testDraw(canvasId);
+        }
+      }
+    } else {
+      console.warn("No signature modal controller found for canvas initialization");
     }
   }
   
   signatureComplete(event) {
     console.log("Signature complete event received", event);
     
-    const signatureData = event.detail.signatureData;
+    // Try to get signature data from event or session storage
+    let signatureData = event.detail?.signatureData;
+    const fieldId = this.currentFieldValue || window.currentFieldId;
     
-    if (!signatureData || !this.currentFieldValue) {
-      console.error("Missing signature data or current field ID");
+    // Check if we need to use session storage as fallback
+    if (!signatureData && sessionStorage.getItem('last_signature_data')) {
+      console.log("Using signature data from session storage");
+      signatureData = sessionStorage.getItem('last_signature_data');
+      
+      // Clear session storage to prevent reuse
+      sessionStorage.removeItem('last_signature_data');
+      sessionStorage.removeItem('last_signature_field_id');
+    }
+    
+    if (!signatureData || !fieldId) {
+      console.error("Missing signature data or field ID", { signatureData: !!signatureData, fieldId });
       return;
     }
     
-    console.log(`Saving signature for field: ${this.currentFieldValue}`);
+    console.log(`Saving signature for field: ${fieldId}`);
     
     // Find the corresponding field - note we need to handle both with/without the "field-" prefix
-    let field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue);
+    let field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
     if (!field) {
-      field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${this.currentFieldValue}`);
+      field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${fieldId}`);
     }
     
     if (!field) {
-      console.error(`Field not found with ID: ${this.currentFieldValue}`);
+      console.error(`Field not found with ID: ${fieldId}`);
       return;
     }
     
     // Update the field with the signature
-    const fieldId = this.currentFieldValue.replace(/^field-/, '');
-    this.updateField(fieldId, signatureData);
+    const processedFieldId = fieldId.replace(/^field-/, '');
+    this.updateField(processedFieldId, signatureData);
     
     // Close the modal
     this.closeModal();
+    
+    // Update progress bar and field statuses
+    this.updateFieldStatuses();
   }
   
   textComplete(event) {
@@ -723,16 +749,18 @@ export default class extends Controller {
       field.removeAttribute('data-action');
       
       // Add the appropriate click handler based on field type
-      if (fieldType === 'text') {
+      if (fieldType === 'text' || fieldType === 'date') {
         field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
-        // Setup text field input
-        this.setupTextField(field);
-      } else if (fieldType === 'date') {
-        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
-        // Setup date field input
-        this.setupDateField(field);
+        
+        // Setup text field input if needed
+        if (fieldType === 'text') {
+          this.setupTextField(field);
+        } else if (fieldType === 'date') {
+          this.setupDateField(field);
+        }
       } else if (fieldType === 'signature' || fieldType === 'initials') {
-        field.setAttribute('data-action', 'click->field-signing#openSignatureModal');
+        // Use the handleFieldClick method for all fields for consistent handling
+        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
       }
       
       console.log(`Set up ${fieldType} field: ${field.dataset.fieldId} with action: ${field.getAttribute('data-action')}`);

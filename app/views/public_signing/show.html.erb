@@ -269,42 +269,60 @@
             input.focus();
             if (fieldType === 'date') input.click();
           } else {
-            // For signature/initials, try to open the modal directly
-            const modal = document.querySelector('[data-field-signing-target="modal"]');
-            if (modal) {
-              // Store field ID in a global variable for reference
-              window.currentFieldId = fieldId;
+            // For signature/initials, use the signature-modal controller
+            const modalController = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
+            
+            if (modalController && typeof modalController.open === 'function') {
+              // Use the controller to open the modal
+              console.log("Using signature-modal controller to open modal");
+              modalController.open(fieldType);
               
-              // Show the modal
-              modal.classList.remove('hidden');
+              // Store current field ID in the field-signing controller
+              const fieldSigningController = document.querySelector('[data-controller="field-signing"]')?.__stimulusController;
+              if (fieldSigningController) {
+                fieldSigningController.currentFieldValue = fieldId;
+              }
+            } else {
+              // Fallback to old approach if controller not available
+              console.log("Falling back to direct DOM manipulation");
               
-              // Show the right content
-              const modalContents = modal.querySelectorAll('.modal-content');
-              modalContents.forEach(content => {
-                content.classList.add('hidden');
-              });
-              
-              const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
-              if (targetContent) targetContent.classList.remove('hidden');
-              
-              // Add backdrop
-              const backdrop = document.createElement('div');
-              backdrop.className = 'modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-40';
-              document.body.appendChild(backdrop);
-              
-              // Add close handler to backdrop
-              backdrop.addEventListener('click', function() {
-                modal.classList.add('hidden');
-                backdrop.remove();
-              });
+              const modal = document.querySelector('[data-controller="signature-modal"]');
+              if (modal) {
+                // Store field ID in a global variable for reference
+                window.currentFieldId = fieldId;
+                
+                // Show the modal
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+                
+                // Show the right content
+                const modalContents = modal.querySelectorAll('.modal-content');
+                modalContents.forEach(content => {
+                  content.classList.add('hidden');
+                  content.style.display = 'none';
+                });
+                
+                const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
+                if (targetContent) {
+                  targetContent.classList.remove('hidden');
+                  targetContent.style.display = 'block';
+                }
+                
+                // Show backdrop
+                const backdrop = document.querySelector('[data-signature-modal-target="backdrop"]');
+                if (backdrop) {
+                  backdrop.classList.remove('hidden');
+                  backdrop.style.display = 'block';
+                }
+              }
             }
           }
         });
       });
       
-      // Check for modal target
-      const modalTarget = document.querySelector('[data-field-signing-target="modal"]');
-      console.log("Modal target found:", modalTarget ? "Yes" : "No");
+      // Check for modal controller
+      const modalController = document.querySelector('[data-controller="signature-modal"]');
+      console.log("Signature modal controller found:", modalController ? "Yes" : "No");
     });
   </script>
 </div>
@@ -313,9 +331,6 @@
 <%= form_with url: public_sign_complete_path(id: @document.id), method: :post, id: "sign-form", class: "hidden" do |f| %>
   <%= f.hidden_field :token, value: @token %>
 <% end %>
-
-<!-- Signature modal -->
-<%= render "signing_modal" %>
 
 <!-- Custom styles for fields -->
 <style>
