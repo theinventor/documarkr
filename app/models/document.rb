@@ -81,21 +81,11 @@ class Document < ApplicationRecord
 
   # Generate a signing URL for a specific signer
   def signing_url_for(signer)
-    host_options = {}
-
-    if Rails.application.config.action_mailer.default_url_options.present?
-      host_options[:host] = Rails.application.config.action_mailer.default_url_options[:host]
-      host_options[:port] = Rails.application.config.action_mailer.default_url_options[:port] if Rails.application.config.action_mailer.default_url_options[:port].present?
-    else
-      # Fallback to localhost in development, actual domain in production
-      host_options[:host] = Rails.env.production? ? "documarkr.com" : "localhost"
-      host_options[:port] = 3000 unless Rails.env.production?
-    end
-
     Rails.application.routes.url_helpers.public_sign_document_url(
       id: self.id,
       token: signer.token,
-      **host_options
+      host: Rails.application.config.action_mailer.default_url_options[:host],
+      port: Rails.application.config.action_mailer.default_url_options[:port]
     )
   end
 

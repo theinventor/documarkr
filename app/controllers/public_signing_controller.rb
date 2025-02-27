@@ -40,7 +40,7 @@ class PublicSigningController < ApplicationController
     @document_signer.mark_as_completed!
 
     # Log this activity
-    @document.log_activity(@document_signer.user, "signed", request, {
+    @document.log_activity(nil, "signed", request, {
       signer_id: @document_signer.id,
       signer_email: @document_signer.email,
       signer_name: @document_signer.name
