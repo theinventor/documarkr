@@ -989,8 +989,8 @@ export default class extends Controller {
     // Collect field data
     console.log("DEBUG: Collecting field data from visible fields");
     this.fieldTargets.forEach(field => {
-      // Modified: Include fields that are visible and either completed or are text/date fields
-      if (field.style.display !== 'none' && (field.dataset.completed === 'true' || field.classList.contains('text-field'))) {
+      // Modified: Include fields that are visible and either completed OR are text/date fields
+      if (field.style.display !== 'none' && (field.dataset.completed === 'true' || field.classList.contains('text-field') || field.classList.contains('date-field'))) {
         try {
           // Get field information
           const fieldId = field.dataset.fieldId;
@@ -1043,6 +1043,27 @@ export default class extends Controller {
             if (!value) {
               value = field.dataset.value;
               console.log(`DEBUG: Trying to get ${fieldType} field value from dataset: "${value}"`);
+            }
+            
+            // For date fields, ensure proper date format
+            if (fieldType === 'date' && value) {
+              try {
+                // Try to parse as date if it looks like a date string
+                const parsedDate = new Date(value);
+                if (!isNaN(parsedDate.getTime())) {
+                  // Format consistently to ensure proper display
+                  const formattedDate = parsedDate.toLocaleDateString('en-US', {
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                  console.log(`DEBUG: Formatted date field ${fieldId} from "${value}" to "${formattedDate}"`);
+                  value = formattedDate;
+                }
+              } catch (dateError) {
+                console.log(`DEBUG: Could not parse date value "${value}" for field ${fieldId}`);
+                // Keep original value if parsing fails
+              }
             }
             
             // Ensure we don't have placeholder content
@@ -1532,8 +1553,8 @@ export default class extends Controller {
           // Embed a standard font
           const font = await pdfDoc.embedFont('Helvetica');
           
-          // Calculate appropriate font size based on field dimensions - make text more prominent
-          const fontSize = Math.min(24, height * 0.8); // Increased from 18 to 24 for better visibility
+          // Calculate appropriate font size based on field dimensions
+          const fontSize = Math.min(24, height * 0.8);
           
           // Calculate text width to center it
           const textWidth = font.widthOfTextAtSize(textContent, fontSize);
@@ -1541,31 +1562,85 @@ export default class extends Controller {
           
           // Force Y position to be more consistent
           // PDF origin is bottom-left, so we need to position from bottom
-          const yPosition = y - (height / 2) + (fontSize / 3); // Adjusted for better vertical centering
+          const yPosition = y - (height / 2) + (fontSize / 3);
           
           console.log(`DEBUG: Drawing ${fieldType} text with font size ${fontSize} at (${xCentered}, ${yPosition})`);
           
-          // First draw a more prominent background box for better visibility
+          // First draw a background box for better visibility
+          // For date fields, use a light yellow background to distinguish them from text fields
+          const backgroundColor = fieldType === 'date' ? rgb(1.0, 1.0, 0.9) : rgb(0.9, 0.9, 1.0); // Light yellow for dates
+          const borderColor = fieldType === 'date' ? rgb(0.9, 0.8, 0.5) : rgb(0.7, 0.7, 0.9); // Darker border for dates
+          
           page.drawRectangle({
             x: x,
             y: y - height,
             width: width,
             height: height,
-            color: rgb(0.9, 0.9, 1.0), // Light blue background
-            borderColor: rgb(0.7, 0.7, 0.9), // Darker border
-            borderWidth: 1.0, // Thicker border
-            opacity: 0.8 // More opaque
+            color: backgroundColor,
+            borderColor: borderColor,
+            borderWidth: 1.5, // Slightly thicker border for dates
+            opacity: 0.8
           });
           
+          // For date fields, format them in a more recognizable date format if possible
+          if (fieldType === 'date') {
+            try {
+              // Check if the text is a valid date
+              const parsedDate = new Date(textContent);
+              if (!isNaN(parsedDate.getTime())) {
+                // If it's a valid date, format it consistently
+                textContent = parsedDate.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                });
+                console.log(`DEBUG: Reformatted date to: "${textContent}"`);
+              }
+            } catch (dateError) {
+              console.log(`DEBUG: Could not parse as date: "${textContent}"`);
+              // Keep original text if date parsing fails
+            }
+          }
+          
           // Draw the text (centered in the field)
+          const textColor = fieldType === 'date' ? rgb(0.5, 0.3, 0.0) : rgb(0, 0, 0.7); // Brown text for dates
+          
           page.drawText(textContent, {
             x: xCentered,
             y: yPosition,
             size: fontSize,
             font: font,
-            color: rgb(0, 0, 0.7), // Dark blue text for better contrast
+            color: textColor,
             lineHeight: fontSize * 1.2
           });
+          
+          // For date fields, add a small calendar icon if there's room
+          if (fieldType === 'date' && width > 80) {
+            const iconSize = Math.min(16, height * 0.3);
+            const iconX = x + width - iconSize - 5;
+            const iconY = y - iconSize - 5;
+            
+            // Simple calendar icon (just a rectangle with a line)
+            page.drawRectangle({
+              x: iconX,
+              y: iconY,
+              width: iconSize,
+              height: iconSize,
+              borderColor: rgb(0.5, 0.3, 0.0),
+              borderWidth: 1,
+              color: rgb(1, 1, 1),
+              opacity: 0.9
+            });
+            
+            // Calendar top line
+            page.drawLine({
+              start: { x: iconX, y: iconY - iconSize * 0.25 },
+              end: { x: iconX + iconSize, y: iconY - iconSize * 0.25 },
+              thickness: 1,
+              color: rgb(0.5, 0.3, 0.0),
+              opacity: 0.9
+            });
+          }
           
           console.log(`DEBUG: Successfully added ${fieldType} text to PDF`);
         } catch (textError) {
@@ -1744,16 +1819,38 @@ export default class extends Controller {
     const value = input.value;
     
     if (value) {
-      // Format the date for display
-      const date = new Date(value);
-      const formattedDate = date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      });
-      
-      this.updateField(fieldId, formattedDate);
-      this.updateFieldStatuses();
+      try {
+        // Parse and format the date more robustly
+        const date = new Date(value);
+        
+        // Validate that the date is valid
+        if (isNaN(date.getTime())) {
+          console.warn(`DEBUG: Invalid date value: "${value}"`);
+          alert('Please enter a valid date');
+          return;
+        }
+        
+        // Format the date for display with a more readable format
+        const formattedDate = date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
+        
+        console.log(`DEBUG: Formatted date field ${fieldId}: "${value}" → "${formattedDate}"`);
+        
+        // Save the formatted date
+        this.updateField(fieldId, formattedDate);
+        
+        // Mark field as date type explicitly
+        field.classList.add('date-field');
+        
+        // Update completion status
+        this.updateFieldStatuses();
+      } catch (error) {
+        console.error(`DEBUG: Error processing date: ${error.message}`);
+        alert('Error processing date. Please try a different format.');
+      }
     } else {
       alert('Please select a date');
     }
