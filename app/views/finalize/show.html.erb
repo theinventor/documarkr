@@ -54,8 +54,10 @@
       <div 
         data-finalize-target="container"
         class="relative">
-        <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
-          <!-- PDF will be rendered here -->
+        <div data-finalize-target="pageContainer" class="pdf-page-container">
+          <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
+            <!-- PDF will be rendered here -->
+          </div>
         </div>
         
         <% if @form_fields.any? %>
