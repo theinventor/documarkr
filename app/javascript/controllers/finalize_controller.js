@@ -1531,71 +1531,6 @@ export default class extends Controller {
             height: drawHeight
           });
           
-          // Only for signature fields (not initials), add a C-shaped outline and "Signed by" text
-          if (fieldType === 'signature') {
-            // Get a name for the signature - default to "Signer" if not available
-            let signerName = "Signer";
-            
-            // Try to get name from field data attributes or parent elements if available
-            if (field.dataset && field.dataset.signerName) {
-              signerName = field.dataset.signerName;
-            } else if (field.closest && field.closest('[data-signer-name]')) {
-              signerName = field.closest('[data-signer-name]').dataset.signerName;
-            }
-            
-            // Calculate position for C-shaped outline
-            const outlineX = x + xOffset - 10; // Slightly to the left of the signature
-            const outlineY = y - drawHeight - yOffset; // Bottom of signature
-            const outlineHeight = drawHeight + 10; // Slightly taller than the signature
-            const outlineWidth = 30; // Width of the C shape
-            
-            try {
-              console.log("DEBUG: Drawing C-shaped outline for signature");
-              
-              // Left vertical line
-              page.drawLine({
-                start: { x: outlineX, y: outlineY },
-                end: { x: outlineX, y: outlineY + outlineHeight },
-                thickness: 2,
-                color: rgb(0, 0, 0),
-                opacity: 0.9
-              });
-              
-              // Top horizontal line (partial)
-              page.drawLine({
-                start: { x: outlineX, y: outlineY + outlineHeight },
-                end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
-                thickness: 2,
-                color: rgb(0, 0, 0),
-                opacity: 0.9
-              });
-              
-              // Bottom horizontal line (partial)
-              page.drawLine({
-                start: { x: outlineX, y: outlineY },
-                end: { x: outlineX + outlineWidth, y: outlineY },
-                thickness: 2,
-                color: rgb(0, 0, 0),
-                opacity: 0.9
-              });
-              
-              // Add "Signed by: [name]" text
-              const font = await pdfDoc.embedFont('Helvetica');
-              page.drawText(`Signed by: ${signerName}`, {
-                x: outlineX + 5,
-                y: outlineY - 15, // Below the signature
-                size: 9, // Small font size
-                font: font,
-                color: rgb(0, 0, 0),
-                opacity: 1.0
-              });
-              
-              console.log(`DEBUG: Successfully added signature border and text`);
-            } catch (borderError) {
-              console.error(`DEBUG: Error drawing signature border:`, borderError);
-            }
-          }
-          
           console.log(`DEBUG: Successfully added ${fieldType} image to PDF`);
         } catch (imgError) {
           console.error(`DEBUG: Error embedding ${fieldType} image:`, imgError);
@@ -1609,7 +1544,89 @@ export default class extends Controller {
             font: helveticaFont
           });
           
+          // Define drawWidth and drawHeight for later C-box code
+          const drawWidth = width;
+          const drawHeight = height;
+          const xOffset = 0;
+          const yOffset = 0;
+          
           console.log(`DEBUG: Used text fallback for ${fieldType} field`);
+        }
+        
+        // Add a C-shaped outline for signature and initials fields
+        try {
+          // Get a name for the field - default to "Signer" if not available
+          let signerName = "Signer";
+          
+          // Try to get name from field data attributes or parent elements if available
+          if (field.dataset && field.dataset.signerName) {
+            signerName = field.dataset.signerName;
+          } else if (field.closest && field.closest('[data-signer-name]')) {
+            signerName = field.closest('[data-signer-name]').dataset.signerName;
+          }
+          
+          // We need valid dimensions for drawing the box - with proper fallbacks
+          const drawWidthValue = typeof drawWidth !== 'undefined' ? drawWidth : width;
+          const drawHeightValue = typeof drawHeight !== 'undefined' ? drawHeight : height;
+          const xOffsetValue = typeof xOffset !== 'undefined' ? xOffset : 0;
+          const yOffsetValue = typeof yOffset !== 'undefined' ? yOffset : 0;
+          
+          // Calculate position for C-shaped outline
+          const outlineX = x + xOffsetValue - 10; // Slightly to the left of the field
+          const outlineY = y - drawHeightValue - yOffsetValue; // Bottom of field
+          const outlineHeight = drawHeightValue + 10; // Slightly taller than the field
+          const outlineWidth = 30; // Width of the C shape
+          
+          console.log(`DEBUG: Drawing C-shaped outline for ${fieldType} field with dimensions: w=${drawWidthValue}, h=${drawHeightValue}`);
+          
+          // Left vertical line
+          page.drawLine({
+            start: { x: outlineX, y: outlineY },
+            end: { x: outlineX, y: outlineY + outlineHeight },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Top horizontal line (partial)
+          page.drawLine({
+            start: { x: outlineX, y: outlineY + outlineHeight },
+            end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Bottom horizontal line (partial)
+          page.drawLine({
+            start: { x: outlineX, y: outlineY },
+            end: { x: outlineX + outlineWidth, y: outlineY },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Add text based on field type
+          let labelText = "";
+          if (fieldType === 'signature') {
+            labelText = `Signed by: ${signerName}`;
+          } else if (fieldType === 'initials') {
+            labelText = `Initialed by: ${signerName}`;
+          }
+          
+          const font = await pdfDoc.embedFont('Helvetica');
+          page.drawText(labelText, {
+            x: outlineX + 5,
+            y: outlineY - 15, // Below the field
+            size: 9, // Small font size
+            font: font,
+            color: rgb(0, 0, 0),
+            opacity: 1.0
+          });
+          
+          console.log(`DEBUG: Successfully added ${fieldType} border and text`);
+        } catch (borderError) {
+          console.error(`DEBUG: Error drawing ${fieldType} border:`, borderError);
         }
       } else if (fieldType === 'text' || fieldType === 'date') {
         // Get text content (handle both DOM elements and data objects)
@@ -1743,6 +1760,71 @@ export default class extends Controller {
           }
           
           console.log(`DEBUG: Successfully added ${fieldType} text to PDF`);
+          
+          // Add a C-shaped outline and "Entered by" text for text/date fields
+          try {
+            // Get a name for the field - default to "Signer" if not available
+            let signerName = "Signer";
+            
+            // Try to get name from field data attributes or parent elements if available
+            if (field.dataset && field.dataset.signerName) {
+              signerName = field.dataset.signerName;
+            } else if (field.closest && field.closest('[data-signer-name]')) {
+              signerName = field.closest('[data-signer-name]').dataset.signerName;
+            }
+            
+            // Calculate position for C-shaped outline - adjust for text fields which have different positioning
+            const outlineX = x - 10; // Left of the text
+            const outlineY = y - height; // Bottom of the field
+            const outlineHeight = height + 5; // Slightly taller than the field
+            const outlineWidth = 30; // Width of the C shape
+            
+            console.log(`DEBUG: Drawing C-shaped outline for ${fieldType} field`);
+            
+            // Left vertical line
+            page.drawLine({
+              start: { x: outlineX, y: outlineY },
+              end: { x: outlineX, y: outlineY + outlineHeight },
+              thickness: 2,
+              color: rgb(0, 0, 0),
+              opacity: 0.9
+            });
+            
+            // Top horizontal line (partial)
+            page.drawLine({
+              start: { x: outlineX, y: outlineY + outlineHeight },
+              end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+              thickness: 2,
+              color: rgb(0, 0, 0),
+              opacity: 0.9
+            });
+            
+            // Bottom horizontal line (partial)
+            page.drawLine({
+              start: { x: outlineX, y: outlineY },
+              end: { x: outlineX + outlineWidth, y: outlineY },
+              thickness: 2,
+              color: rgb(0, 0, 0),
+              opacity: 0.9
+            });
+            
+            // Add "Entered by: [name]" text
+            const font = await pdfDoc.embedFont('Helvetica');
+            let labelText = fieldType === 'date' ? `Date entered by: ${signerName}` : `Entered by: ${signerName}`;
+            
+            page.drawText(labelText, {
+              x: outlineX + 5,
+              y: outlineY - 15, // Below the field
+              size: 9, // Small font size
+              font: font,
+              color: rgb(0, 0, 0),
+              opacity: 1.0
+            });
+            
+            console.log(`DEBUG: Successfully added ${fieldType} border and text`);
+          } catch (borderError) {
+            console.error(`DEBUG: Error drawing ${fieldType} border:`, borderError);
+          }
         } catch (textError) {
           console.error(`DEBUG: Error adding ${fieldType} text:`, textError);
           // Try a fallback approach with simpler text rendering
