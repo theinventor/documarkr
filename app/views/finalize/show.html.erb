@@ -70,23 +70,20 @@
                 data-y-position="<%= field.y_position %>" 
                 data-width="<%= field.width %>"
                 data-height="<%= field.height %>"
-                class="form-field-container completed <%= field.field_type %>-field">
+                data-field-id="field-<%= field.id %>"
+                class="form-field-container completed <%= field.field_type %>-field positioned-field">
                 <% case field.field_type %>
                 <% when 'signature' %>
                   <% if field.value.present? %>
                     <img src="<%= field.value %>" class="w-full h-full object-contain p-1" />
                   <% end %>
-                <% when 'text' %>
-                  <div class="p-2 w-full h-full flex items-center">
-                    <%= field.value %>
-                  </div>
-                <% when 'date' %>
-                  <div class="p-2 w-full h-full flex items-center">
+                <% when 'text', 'date' %>
+                  <div class="p-2 w-full h-full flex items-center justify-center text-center">
                     <%= field.value %>
                   </div>
                 <% when 'initials' %>
                   <% if field.value.present? %>
-                    <img src="<%= field.value %>" class="w-full h-full object-contain p-1" />
+                    <%= image_tag field.value, class: 'w-full h-full object-contain p-1' %>
                   <% end %>
                 <% end %>
               </div>
