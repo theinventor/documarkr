@@ -312,92 +312,114 @@ export default class extends Controller {
   }
   
   openSignatureModal(event) {
-    console.log("Opening signature modal for field:", event.currentTarget.dataset.fieldId);
+    event.preventDefault();
     
-    // Store the current field for later use
-    this.currentFieldValue = event.currentTarget.dataset.fieldId;
+    console.log("Opening signature modal from field_signing_controller");
     
-    // Also set a global variable as a fallback
-    window.currentFieldId = event.currentTarget.dataset.fieldId;
+    // Get the field element
+    const field = event.currentTarget;
+    const fieldType = field.dataset.fieldType;
+    const fieldId = field.dataset.fieldId;
     
-    // First try to use the signature-modal controller
-    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
-    const modalController = signatureModalElement?.__stimulusController;
+    // Store current field ID
+    this.currentFieldValue = fieldId;
+    window.currentFieldId = fieldId; // Also store in global var for fallback methods
     
+    // Try multiple approaches to open the modal
+    
+    // Approach 1: Use the global function if available
+    if (typeof window.openSigningModal === 'function') {
+      console.log("Using global openSigningModal function");
+      window.openSigningModal(fieldType, fieldId);
+      
+      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
+      setTimeout(() => {
+        if (typeof window.activateDrawingOnCurrentCanvas === 'function') {
+          console.log("Activating drawing using global helper");
+          window.activateDrawingOnCurrentCanvas();
+        }
+      }, 500);
+      
+      return;
+    }
+    
+    // Approach 2: Try to use the controller directly
+    const modalController = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
     if (modalController && typeof modalController.open === 'function') {
-      // Determine the field type
-      const fieldType = event.currentTarget.dataset.fieldType;
-      console.log(`Using signature-modal controller to open modal for ${fieldType}`);
+      console.log("Using signature-modal controller to open modal");
+      modalController.open(event);
       
-      // Open the modal with the correct field type
-      modalController.open({
-        currentTarget: {
-          dataset: {
-            fieldType: fieldType
-          }
-        },
-        preventDefault: () => {},
-        stopPropagation: () => {}
-      });
+      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
+      setTimeout(() => {
+        console.log("Trying to activate drawing after modal open");
+        if (modalController && typeof modalController.testDraw === 'function') {
+          modalController.testDraw(event);
+        }
+      }, 500);
       
       return;
     }
     
-    // Fallback to manual modal handling if the controller isn't available
-    console.log("Signature modal controller not found, using fallback approach");
+    // Approach 3: Fall back to direct DOM manipulation
+    console.log("Using direct DOM manipulation to open modal");
     
-    // Try to find the modal element directly instead of using modalTarget
     const modal = document.querySelector('[data-controller="signature-modal"]');
-    
     if (!modal) {
-      console.error("No modal element found with data-controller='signature-modal'! Check your HTML structure.");
+      console.error("Could not find signature modal");
       return;
     }
-    
-    const fieldType = event.currentTarget.dataset.fieldType;
     
     // Show the modal
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
     
-    // Find and show the correct content type (signature or initials)
-    const modalContents = modal.querySelectorAll('.modal-content');
-    modalContents.forEach(content => {
-      content.classList.add('hidden');
-      content.style.display = 'none';
+    // Show the appropriate content
+    const containers = modal.querySelectorAll('.modal-content');
+    containers.forEach(container => {
+      container.classList.add('hidden');
+      container.style.display = 'none';
     });
     
-    // Show the right content
     const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
     if (targetContent) {
       targetContent.classList.remove('hidden');
       targetContent.style.display = 'block';
-    } else {
-      console.error(`No modal content found for field type: ${fieldType}`);
     }
     
-    // Show backdrop (if available)
-    const backdrop = document.querySelector('#modalBackdrop');
+    // Show backdrop
+    const backdrop = document.querySelector('[data-signature-modal-target="backdrop"]');
     if (backdrop) {
       backdrop.classList.remove('hidden');
       backdrop.style.display = 'block';
-      backdrop.style.zIndex = '999';
-      backdrop.style.opacity = '0.75';
-      backdrop.style.backgroundColor = '#000000';
     }
     
-    // Try to initialize signature pad through the controller or fallback
+    // Make sure button containers are visible
+    const buttonContainers = modal.querySelectorAll('[data-signature-modal-target="buttonContainer"]');
+    buttonContainers.forEach(container => {
+      container.style.display = 'flex';
+    });
+    
+    // Try to trigger the test draw function after a delay
     setTimeout(() => {
+      console.log("Attempting to trigger test draw after manual modal open");
+      
+      // Find the canvas
       const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
       const canvas = document.getElementById(canvasId);
       
       if (canvas) {
-        // Force controller initialization through test draw
-        if (modal.__stimulusController && typeof modal.__stimulusController.testDraw === 'function') {
-          modal.__stimulusController.testDraw(canvasId);
+        console.log("Found canvas, triggering test draw");
+        
+        // SIMPLIFIED FIX: Just click the test button directly
+        const testButton = document.querySelector(`button[data-action="click->signature-modal#testDraw"][data-field-id="${canvasId}"]`);
+        if (testButton) {
+          console.log("Found test button, clicking it directly");
+          testButton.click();
+        } else {
+          console.log("Could not find test button");
         }
       }
-    }, 100);
+    }, 500);
   }
   
   closeModal() {

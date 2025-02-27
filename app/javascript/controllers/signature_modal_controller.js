@@ -7,6 +7,59 @@ export default class extends Controller {
   connect() {
     console.log("Signature modal controller connected");
     this.setupModalHandlers();
+    
+    // CRITICAL FIX: Add direct event listeners to ALL signature and initial fields to ensure modal opens
+    console.log("Adding direct field click handlers to open signature modal");
+    
+    // Add global method for opening modal that works even if controller actions fail
+    window.openSignatureModal = (fieldType, fieldId) => {
+      console.log("Direct call to open signature modal:", fieldType, fieldId);
+      this.open(fieldType);
+      // Store the field ID globally for reference
+      window.currentFieldId = fieldId;
+    };
+    
+    // Wait for DOM to be fully loaded
+    setTimeout(() => {
+      // Find all signature and initials fields
+      const fields = document.querySelectorAll('[data-field-type="signature"], [data-field-type="initials"]');
+      console.log(`Found ${fields.length} signature/initial fields to attach handlers to`);
+      
+      fields.forEach(field => {
+        const fieldType = field.dataset.fieldType;
+        const fieldId = field.dataset.fieldId;
+        
+        console.log(`Adding direct click handler to ${fieldType} field: ${fieldId}`);
+        
+        // Remove any existing click handlers to prevent duplicates
+        field.removeEventListener('click', field._modalOpenHandler);
+        
+        // Create a new handler
+        field._modalOpenHandler = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          console.log(`Direct field click on ${fieldType} field ${fieldId}`);
+          
+          // Store current field ID for reference
+          window.currentFieldId = fieldId;
+          
+          // Call our open method directly
+          this.open(fieldType);
+          
+          // Store the field ID in the field-signing controller as well
+          const fieldSigningController = document.querySelector('[data-controller="field-signing"]')?.__stimulusController;
+          if (fieldSigningController) {
+            fieldSigningController.currentFieldValue = fieldId;
+          }
+          
+          return false;
+        };
+        
+        // Add the click handler
+        field.addEventListener('click', field._modalOpenHandler);
+      });
+    }, 300); // Wait for DOM to be fully ready
   }
   
   setupModalHandlers() {
@@ -35,6 +88,149 @@ export default class extends Controller {
     window.openSigningModal = this.open.bind(this);
     window.closeSigningModal = this.close.bind(this);
     window.testDrawOnCanvas = this.testDraw.bind(this);
+    
+    // NEW: Add a helper function to force drawing activation
+    window.activateDrawingOnCurrentCanvas = () => {
+      console.log("Manually activating drawing on current canvas");
+      
+      // Try to find the current canvas
+      const modal = document.querySelector('#signingModal');
+      if (!modal || modal.classList.contains('hidden')) {
+        console.log("Modal not visible, can't activate drawing");
+        return false;
+      }
+      
+      // Find the visible content container
+      const visibleContent = modal.querySelector('.modal-content:not(.hidden)');
+      if (!visibleContent) {
+        console.log("No visible content container found");
+        return false;
+      }
+      
+      // Find the canvas
+      const canvas = visibleContent.querySelector('canvas');
+      if (!canvas) {
+        console.log("No canvas found in visible content");
+        return false;
+      }
+      
+      console.log("Found canvas:", canvas.id);
+      
+      // Use the testDraw method to activate drawing
+      const controller = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
+      if (controller && typeof controller.testDraw === 'function') {
+        console.log("Using controller method to activate drawing");
+        controller.testDraw({ target: canvas });
+        return true;
+      } else {
+        // Fallback - direct manipulation
+        console.log("Fallback: Direct manipulation to activate drawing");
+        
+        // Make sure canvas has the right properties
+        canvas.style.pointerEvents = 'auto';
+        canvas.style.touchAction = 'none';
+        canvas.style.userSelect = 'none';
+        
+        // Force a redraw with a dot to verify canvas is working
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = 'rgba(0,0,255,0.5)';
+          ctx.beginPath();
+          ctx.arc(10, 10, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'black';
+          
+          // Add direct event listeners to the canvas
+          console.log("Adding direct event listeners to canvas");
+          
+          // Drawing state
+          const state = { isDrawing: false, lastX: 0, lastY: 0 };
+          
+          // Event handlers
+          const drawHandler = function(e) {
+            if (!state.isDrawing) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+            
+            ctx.beginPath();
+            ctx.moveTo(state.lastX, state.lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            state.lastX = x;
+            state.lastY = y;
+          };
+          
+          const startHandler = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            state.isDrawing = true;
+            
+            const rect = canvas.getBoundingClientRect();
+            state.lastX = (e.clientX || e.touches[0].clientX) - rect.left;
+            state.lastY = (e.clientY || e.touches[0].clientY) - rect.top;
+            
+            // Add move handlers
+            document.addEventListener('mousemove', drawHandler);
+            document.addEventListener('touchmove', drawHandler);
+          };
+          
+          const stopHandler = function() {
+            state.isDrawing = false;
+            
+            // Remove move handlers
+            document.removeEventListener('mousemove', drawHandler);
+            document.removeEventListener('touchmove', drawHandler);
+          };
+          
+          // Add start handlers
+          canvas.addEventListener('mousedown', startHandler);
+          canvas.addEventListener('touchstart', startHandler);
+          
+          // Add stop handlers
+          document.addEventListener('mouseup', stopHandler);
+          document.addEventListener('touchend', stopHandler);
+          
+          return true;
+        }
+        
+        return false;
+      }
+    };
+    
+    // Auto-trigger the drawing activation helper after a delay when the modal becomes visible
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && 
+            (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+          
+          const modal = document.querySelector('#signingModal');
+          if (modal && !modal.classList.contains('hidden') && 
+              window.getComputedStyle(modal).display !== 'none') {
+            
+            console.log("Modal became visible, activating drawing after delay");
+            setTimeout(() => {
+              window.activateDrawingOnCurrentCanvas();
+            }, 300);
+          }
+        }
+      });
+    });
+    
+    // Start observing the modal for visibility changes
+    const modal = document.querySelector('#signingModal');
+    if (modal) {
+      observer.observe(modal, {
+        attributes: true,
+        attributeFilter: ['style', 'class']
+      });
+    }
   }
   
   setupButtonHandlers() {
@@ -321,6 +517,13 @@ export default class extends Controller {
       setTimeout(() => this.checkCanvasContentAndUpdateButton(canvas), 200);
       
       console.log("Modal and canvas initialization complete - should be ready for drawing");
+      
+      // CRITICAL NEW ADDITION: Automatically trigger the testDraw method after a short delay
+      // This uses the known-working test button functionality
+      setTimeout(() => {
+        console.log("Auto-triggering testDraw to ensure drawing is activated");
+        this.testDraw({ target: canvas });
+      }, 100);
       
       return canvas;
     } catch (error) {
