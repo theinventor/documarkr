@@ -326,3 +326,9 @@ Checkpoint: March 5th, 2025
 - Form fields maintain proper positioning and scaling when zooming
 - Page navigation and field positioning in multi-page view is fully functional
 - Fixed CSS styling for better field visibility and user experience
+
+
+2/27/2025
+- have signing working, and pdf making working
+- the pdf is ugly, the meta annotations are really ugly too
+- TODO: make each field type a separate function so they can fine-tune the appearance of each field type without LLM breaking the others with each edit.
