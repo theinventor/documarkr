@@ -1670,34 +1670,19 @@ export default class extends Controller {
           // Embed a standard font
           const font = await pdfDoc.embedFont('Helvetica');
           
-          // Calculate appropriate font size based on field dimensions
-          const fontSize = Math.min(24, height * 0.8);
+          // Use a fixed font size rather than scaling to fit the field
+          const fontSize = 12; // Fixed large font size
           
-          // Calculate text width to center it
+          // Calculate text width but don't center it - just add a fixed margin
           const textWidth = font.widthOfTextAtSize(textContent, fontSize);
-          const xCentered = x + (width - textWidth) / 2;
+          const xPosition = x + 5; // Fixed small left margin
           
-          // Force Y position to be more consistent
-          // PDF origin is bottom-left, so we need to position from bottom
+          // Position from bottom with a fixed offset
           const yPosition = y - (height / 2) + (fontSize / 3);
           
-          console.log(`DEBUG: Drawing ${fieldType} text with font size ${fontSize} at (${xCentered}, ${yPosition})`);
+          console.log(`DEBUG: Drawing ${fieldType} text with fixed font size ${fontSize} at (${xPosition}, ${yPosition})`);
           
-          // First draw a background box for better visibility
-          // For date fields, use a light yellow background to distinguish them from text fields
-          const backgroundColor = fieldType === 'date' ? rgb(1.0, 1.0, 0.9) : rgb(0.9, 0.9, 1.0); // Light yellow for dates
-          const borderColor = fieldType === 'date' ? rgb(0.9, 0.8, 0.5) : rgb(0.7, 0.7, 0.9); // Darker border for dates
-          
-          page.drawRectangle({
-            x: x,
-            y: y - height,
-            width: width,
-            height: height,
-            color: backgroundColor,
-            borderColor: borderColor,
-            borderWidth: 1.5, // Slightly thicker border for dates
-            opacity: 0.8
-          });
+          // Removed the background box and borders - text will be drawn directly on the PDF
           
           // For date fields, format them in a more recognizable date format if possible
           if (fieldType === 'date') {
@@ -1719,15 +1704,13 @@ export default class extends Controller {
             }
           }
           
-          // Draw the text (centered in the field)
-          const textColor = fieldType === 'date' ? rgb(0.5, 0.3, 0.0) : rgb(0, 0, 0.7); // Brown text for dates
-          
+          // Draw the text content without trying to fit it in the box
           page.drawText(textContent, {
-            x: xCentered,
+            x: xPosition,
             y: yPosition,
             size: fontSize,
             font: font,
-            color: textColor,
+            color: rgb(0, 0, 0),
             lineHeight: fontSize * 1.2
           });
           
