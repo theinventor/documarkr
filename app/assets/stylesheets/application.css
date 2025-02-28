@@ -11,3 +11,9 @@
 
 /* Import custom styles */
 /* @import "app.css"; */
+
+.positioned-field {
+  position: absolute;
+  z-index: 20;
+  /* Add other styles as needed */
+}

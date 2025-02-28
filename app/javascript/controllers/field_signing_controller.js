@@ -2,7 +2,8 @@ import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="field-signing"
 export default class extends Controller {
-  static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas"]
+  static targets = ["field", "container", "modal", "pageContainer", "signatureCanvas", 
+                    "fieldsList", "progressBar", "completedCount", "totalCount"]
   static values = {
     documentId: Number,
     signerId: Number,
@@ -30,6 +31,18 @@ export default class extends Controller {
     document.addEventListener('pdf-viewer:scaleChanged', this.boundUpdateFieldPositions);
     document.addEventListener('pdf-viewer:loaded', this.boundUpdateFieldPositions);
     
+    // Add listeners for PDF pause/resume
+    this.pdfPaused = false;
+    document.addEventListener('pdf-viewer:pause', () => {
+      console.log("PDF viewer paused");
+      this.pdfPaused = true;
+    });
+    
+    document.addEventListener('pdf-viewer:resume', () => {
+      console.log("PDF viewer resumed");
+      this.pdfPaused = false;
+    });
+    
     // Check if container target exists and log result
     if (this.hasContainerTarget) {
       console.log("Container target found:", this.containerTarget);
@@ -52,14 +65,33 @@ export default class extends Controller {
       }
     });
     
-    // Check if all signatures are complete
-    this.checkCompletionStatus();
+    // Check if all signatures are complete and update progress
+    this.updateFieldStatuses();
     
     // Add a failsafe for field positioning
     setTimeout(() => {
       console.log("Running field positioning failsafe");
       this.updateFieldPositions();
     }, 2000);
+    
+    // Add submit button if not already present
+    this.addSubmitButton();
+
+    // Add console log to check how many fields we have
+    console.log(`Found ${this.fieldTargets.length} field targets`);
+    
+    // Make sure every field has the right click action
+    this.setupFieldClickHandlers();
+
+    // Initialize progress bar and field list
+    this.updateProgressBar();
+
+    // Check if modal target exists and log result
+    if (this.hasModalTarget) {
+      console.log("Modal target found on connect:", this.modalTarget);
+    } else {
+      console.error("Modal target is MISSING on connect! Field interactions won't work properly.");
+    }
   }
   
   disconnect() {
@@ -84,6 +116,19 @@ export default class extends Controller {
     // In the new layout, all fields should be visible
     this.fieldTargets.forEach(field => {
       field.classList.remove('hidden-field');
+      
+      // Make fields pointer-events-auto so they can be clicked
+      field.classList.remove('pointer-events-none');
+      field.classList.add('pointer-events-auto');
+      
+      // Add hover effect
+      field.classList.add('hover:bg-blue-50');
+      
+      // For date fields, pre-populate with today's date
+      if (field.dataset.fieldType === 'date' && !field.dataset.completed) {
+        const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+        this.updateField(field.dataset.fieldId.replace('field-', ''), todayDate);
+      }
     });
   }
   
@@ -107,258 +152,379 @@ export default class extends Controller {
       field.style.position = 'absolute';
       field.style.left = `${xPos}%`;
       field.style.top = `${yPos}%`;
-      field.style.width = `${width}px`;
-      field.style.height = `${height}px`;
+      
+      // Make fields larger for better visibility - increase size by 20%
+      const scaleFactor = 1.5; // Increase size by 50%
+      field.style.width = `${width * scaleFactor}px`;
+      field.style.height = `${height * scaleFactor}px`;
       field.style.transform = 'translate(-50%, -50%)';
+      field.style.cursor = 'pointer';
+      field.style.border = isCompleted ? '2px solid #4CAF50' : '2px dashed #2563EB';
+      field.style.borderRadius = '4px';
+      
+      // Make field backgrounds more visible
+      field.style.backgroundColor = isCompleted ? 'rgba(220, 252, 231, 0.7)' : 'rgba(239, 246, 255, 0.7)';
+      
+      // Ensure minimum sizes for better interaction
+      const minWidth = 100; // Minimum width in pixels
+      const minHeight = 40; // Minimum height in pixels
+      
+      if (parseFloat(width) * scaleFactor < minWidth) {
+        field.style.width = `${minWidth}px`;
+      }
+      
+      if (parseFloat(height) * scaleFactor < minHeight) {
+        field.style.height = `${minHeight}px`;
+      }
       
       // Add a class to identify the page this field belongs to
       field.classList.add(`page-${pageNumber}-field`);
       
-      // If the field is not already completed, convert it to an appropriate input
-      if (!isCompleted) {
-        if (fieldType === 'text') {
-          // Replace with an actual text input
-          const label = field.querySelector('.text-xs');
-          if (label) {
-            const required = field.dataset.required === "true";
-            
-            // Clear the field
-            field.innerHTML = '';
-            
-            // Create and add input
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'w-full h-full p-1 text-sm border-none focus:ring-2 focus:ring-blue-500';
-            input.placeholder = required ? 'Text *' : 'Text';
-            input.required = required;
-            input.dataset.action = 'change->field-signing#handleInputChange';
-            
-            field.appendChild(input);
-            field.dataset.action = ''; // Remove the modal open action
-          }
-        } 
-        else if (fieldType === 'date') {
-          // Replace with an actual date input
-          const label = field.querySelector('.text-xs');
-          if (label) {
-            const required = field.dataset.required === "true";
-            
-            // Clear the field
-            field.innerHTML = '';
-            
-            // Create and add input
-            const input = document.createElement('input');
-            input.type = 'date';
-            input.className = 'w-full h-full p-1 text-sm border-none focus:ring-2 focus:ring-blue-500';
-            input.required = required;
-            input.dataset.action = 'change->field-signing#handleInputChange';
-            
-            // Set default value to today's date
-            const today = new Date().toISOString().split('T')[0];
-            input.value = today;
-            
-            field.appendChild(input);
-            field.dataset.action = ''; // Remove the modal open action
-          }
-        }
-        // Keep signature/initials as clickable areas that open the modal
+      // If fieldType is text and not completed, allow direct typing
+      if (fieldType === 'text' && !isCompleted) {
+        this.setupTextField(field);
+      }
+      
+      // If fieldType is date and not completed, setup date field
+      if (fieldType === 'date' && !isCompleted) {
+        this.setupDateField(field);
       }
     });
   }
   
-  // Update field positions based on the current PDF pages in the DOM
-  updateFieldPositions() {
-    console.log("Updating field positions for multi-page layout");
+  setupTextField(field) {
+    console.log("Setting up text field:", field.dataset.fieldId);
     
-    // Check if we have a container target
-    if (!this.hasContainerTarget) {
-      console.error("Missing container target! Cannot position fields.");
-      return;
+    // Remove existing content
+    field.innerHTML = '';
+    
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'text-input-container';
+    
+    // Create input
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'text-input';
+    input.placeholder = field.dataset.fieldLabel || 'Enter text';
+    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
+    
+    // Create save button
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'save-button opacity-50 cursor-not-allowed';
+    saveButton.disabled = true;
+    saveButton.setAttribute('data-action', 'click->field-signing#saveTextField');
+    
+    // Add to container
+    container.appendChild(input);
+    container.appendChild(saveButton);
+    
+    // Add to field
+    field.appendChild(container);
+    
+    // Focus the input
+    setTimeout(() => {
+      input.focus();
+    }, 100);
+  }
+  
+  setupDateField(field) {
+    console.log("Setting up date field:", field.dataset.fieldId);
+    
+    // Remove existing content
+    field.innerHTML = '';
+    
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'text-input-container';
+    
+    // Create input
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'date-input';
+    input.setAttribute('data-action', 'input->field-signing#handleInputChange');
+    
+    // Create save button
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'save-button opacity-50 cursor-not-allowed';
+    saveButton.disabled = true;
+    saveButton.setAttribute('data-action', 'click->field-signing#saveDateField');
+    
+    // Add to container
+    container.appendChild(input);
+    container.appendChild(saveButton);
+    
+    // Add to field
+    field.appendChild(container);
+    
+    // Focus the input
+    setTimeout(() => {
+      input.focus();
+    }, 100);
+  }
+  
+  // Handle direct field click
+  handleFieldClick(event) {
+    console.log("Field clicked:", event.currentTarget.dataset.fieldId, "Type:", event.currentTarget.dataset.fieldType);
+    
+    const field = event.currentTarget;
+    const fieldType = field.dataset.fieldType;
+    
+    // For text fields, don't open modal, just focus the input
+    if (fieldType === 'text') {
+      const input = field.querySelector('input');
+      if (input) {
+        input.focus();
+        event.stopPropagation();
+        return;
+      }
     }
     
-    // Find all PDF page containers in the document - specifically inside the pdf-pages-container
-    const pagesContainer = document.querySelector('.pdf-pages-container');
-    if (!pagesContainer) {
-      console.warn("No pages container found - delaying field positioning");
-      setTimeout(() => this.updateFieldPositions(), 500);
-      return;
-    }
-    
-    const pageContainers = pagesContainer.querySelectorAll('.pdf-page-container');
-    
-    if (!pageContainers.length) {
-      console.log("No page containers found yet, will try again later");
-      setTimeout(() => this.updateFieldPositions(), 500);
-      return;
-    }
-    
-    console.log(`Found ${pageContainers.length} page containers`);
-    
-    try {
-      // Get the container rect to calculate relative positions
-      const containerRect = this.containerTarget.getBoundingClientRect();
-      
-      // For each page, find its top offset and position fields accordingly
-      pageContainers.forEach(pageContainer => {
-        const pageNumber = parseInt(pageContainer.dataset.page, 10);
-        const pageCanvas = pageContainer.querySelector('canvas');
-        
-        if (!pageCanvas) {
-          console.log(`No canvas found for page ${pageNumber}`);
+    // For date fields, open date picker directly in the field
+    if (fieldType === 'date') {
+      const input = field.querySelector('input');
+      if (input) {
+        input.focus();
+        input.click(); // Trigger the date picker
+        event.stopPropagation();
+        return;
+      } else {
+        // If no input exists, create one
+        this.setupDateField(field);
+        const input = field.querySelector('input');
+        if (input) {
+          input.focus();
+          input.click();
+          event.stopPropagation();
           return;
-        }
-        
-        const pageRect = pageCanvas.getBoundingClientRect();
-        
-        // Calculate page offset relative to container
-        const pageOffsetTop = pageRect.top - containerRect.top;
-        const pageOffsetLeft = pageRect.left - containerRect.left;
-        
-        console.log(`Page ${pageNumber} positioned at: left=${pageOffsetLeft}, top=${pageOffsetTop}, width=${pageRect.width}, height=${pageRect.height}`);
-        
-        // Find all fields for this page
-        const fields = this.fieldTargets.filter(field => 
-          parseInt(field.dataset.page, 10) === pageNumber
-        );
-        
-        console.log(`Found ${fields.length} fields for page ${pageNumber}`);
-        
-        fields.forEach(field => {
-          // Get the position as percentage of the page
-          const xPosPercent = parseFloat(field.dataset.xPosition);
-          const yPosPercent = parseFloat(field.dataset.yPosition);
-          
-          // Calculate absolute position within the page
-          const xPosAbsolute = (xPosPercent / 100) * pageRect.width;
-          const yPosAbsolute = (yPosPercent / 100) * pageRect.height;
-          
-          // Set absolute position relative to the container
-          field.style.position = 'absolute';
-          field.style.left = `${pageOffsetLeft + xPosAbsolute}px`;
-          field.style.top = `${pageOffsetTop + yPosAbsolute}px`;
-          
-          // Set the width and height based on the scaled page
-          const fieldWidth = parseFloat(field.dataset.width);
-          const fieldHeight = parseFloat(field.dataset.height);
-          
-          // Apply the same scale factor that's being used on the page
-          const scale = pageRect.width / pageCanvas.width;
-          field.style.width = `${fieldWidth * scale}px`;
-          field.style.height = `${fieldHeight * scale}px`;
-          
-          // Use transform for centering (offset by 50% of the field's width and height)
-          field.style.transform = 'translate(-50%, -50%)';
-          
-          // Make field visible now that it's correctly positioned
-          field.classList.add('positioned');
-          
-          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
-        });
-      });
-    } catch (error) {
-      console.error("Error positioning fields:", error);
-    }
-  }
-  
-  // Handle the page change event
-  handlePageChange(event) {
-    console.log("Page change event received:", event);
-    // In the new layout with all pages displayed, we just need to ensure
-    // fields are positioned correctly
-    this.updateFieldPositions();
-  }
-  
-  openSignatureModal(event) {
-    event.preventDefault()
-    
-    // Only respond to empty fields
-    const field = event.currentTarget
-    if (field.dataset.completed === "true") return
-    
-    const fieldType = field.dataset.fieldType
-    const fieldId = field.dataset.fieldId
-    
-    this.currentFieldValue = fieldId
-    
-    // Show the appropriate modal
-    if (this.hasModalTarget) {
-      // Determine which part of the modal to show
-      const modalContent = this.modalTarget.querySelector(`.modal-content[data-field-type="${fieldType}"]`)
-      if (modalContent) {
-        // Hide all content sections, show the current one
-        this.modalTarget.querySelectorAll('.modal-content').forEach(content => {
-          content.classList.add('hidden')
-        })
-        modalContent.classList.remove('hidden')
-        
-        // Show the modal
-        this.modalTarget.classList.remove('hidden')
-        
-        // Add modal backdrop
-        const backdrop = document.createElement('div')
-        backdrop.className = 'modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-40'
-        document.body.appendChild(backdrop)
-        this.backdrop = backdrop
-        
-        // If this is a signature field, initialize the signature pad
-        if (fieldType === 'signature' || fieldType === 'initials') {
-          this.initializeSignaturePad()
-        }
-        
-        // If text field, focus on the input
-        if (fieldType === 'text') {
-          setTimeout(() => {
-            const input = modalContent.querySelector('input[type="text"]')
-            if (input) input.focus()
-          }, 100)
-        }
-        
-        // If date field, initialize with current date
-        if (fieldType === 'date') {
-          const input = modalContent.querySelector('input[type="date"]')
-          if (input && !input.value) {
-            const today = new Date().toISOString().split('T')[0]
-            input.value = today
-          }
         }
       }
     }
+    
+    // For signature and initials, open the modal with our updated method
+    if (fieldType === 'signature' || fieldType === 'initials') {
+      this.openSignatureModal(event);
+      event.stopPropagation();
+      return;
+    }
+  }
+  
+  openSignatureModal(event) {
+    event.preventDefault();
+    
+    console.log("Opening signature modal from field_signing_controller");
+    
+    // Get the field element
+    const field = event.currentTarget;
+    const fieldType = field.dataset.fieldType;
+    const fieldId = field.dataset.fieldId;
+    
+    // Store current field ID
+    this.currentFieldValue = fieldId;
+    window.currentFieldId = fieldId; // Also store in global var for fallback methods
+    
+    // Try multiple approaches to open the modal
+    
+    // Approach 1: Use the global function if available
+    if (typeof window.openSigningModal === 'function') {
+      console.log("Using global openSigningModal function");
+      window.openSigningModal(fieldType, fieldId);
+      
+      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
+      setTimeout(() => {
+        if (typeof window.activateDrawingOnCurrentCanvas === 'function') {
+          console.log("Activating drawing using global helper");
+          window.activateDrawingOnCurrentCanvas();
+        }
+      }, 500);
+      
+      return;
+    }
+    
+    // Approach 2: Try to use the controller directly
+    const modalController = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
+    if (modalController && typeof modalController.open === 'function') {
+      console.log("Using signature-modal controller to open modal");
+      modalController.open(event);
+      
+      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
+      setTimeout(() => {
+        console.log("Trying to activate drawing after modal open");
+        if (modalController && typeof modalController.testDraw === 'function') {
+          modalController.testDraw(event);
+        }
+      }, 500);
+      
+      return;
+    }
+    
+    // Approach 3: Fall back to direct DOM manipulation
+    console.log("Using direct DOM manipulation to open modal");
+    
+    const modal = document.querySelector('[data-controller="signature-modal"]');
+    if (!modal) {
+      console.error("Could not find signature modal");
+      return;
+    }
+    
+    // Show the modal
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    
+    // Show the appropriate content
+    const containers = modal.querySelectorAll('.modal-content');
+    containers.forEach(container => {
+      container.classList.add('hidden');
+      container.style.display = 'none';
+    });
+    
+    const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
+    if (targetContent) {
+      targetContent.classList.remove('hidden');
+      targetContent.style.display = 'block';
+    }
+    
+    // Show backdrop
+    const backdrop = document.querySelector('[data-signature-modal-target="backdrop"]');
+    if (backdrop) {
+      backdrop.classList.remove('hidden');
+      backdrop.style.display = 'block';
+    }
+    
+    // Make sure button containers are visible
+    const buttonContainers = modal.querySelectorAll('[data-signature-modal-target="buttonContainer"]');
+    buttonContainers.forEach(container => {
+      container.style.display = 'flex';
+    });
+    
+    // Try to trigger the test draw function after a delay
+    setTimeout(() => {
+      console.log("Attempting to trigger test draw after manual modal open");
+      
+      // Find the canvas
+      const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+      const canvas = document.getElementById(canvasId);
+      
+      if (canvas) {
+        console.log("Found canvas, triggering test draw");
+        
+        // SIMPLIFIED FIX: Just click the test button directly
+        const testButton = document.querySelector(`button[data-action="click->signature-modal#testDraw"][data-field-id="${canvasId}"]`);
+        if (testButton) {
+          console.log("Found test button, clicking it directly");
+          testButton.click();
+        } else {
+          console.log("Could not find test button");
+        }
+      }
+    }, 500);
   }
   
   closeModal() {
-    if (this.hasModalTarget) {
-      this.modalTarget.classList.add('hidden')
+    console.log("Closing modal using controller method");
+    
+    // Find the modal controller instead of directly manipulating DOM
+    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
+    const modalController = signatureModalElement?.__stimulusController;
+    
+    if (modalController && typeof modalController.close === 'function') {
+      // Use the controller's close method
+      console.log("Using signature-modal controller to close modal");
+      modalController.close();
+    } else {
+      // Fallback to direct modal manipulation if controller not initialized
+      console.log("Falling back to direct modal manipulation");
+      
+      // Try to find the modal element directly
+      const modal = document.querySelector('[data-controller="signature-modal"]');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+        
+        // Hide the backdrop
+        const backdrop = document.getElementById('modalBackdrop');
+        if (backdrop) {
+          backdrop.classList.add('hidden');
+          backdrop.style.display = 'none';
+        }
+      } else {
+        console.error("No modal element found for closing!");
+      }
     }
     
-    if (this.backdrop) {
-      this.backdrop.remove()
-      this.backdrop = null
-    }
+    // Reset current field value
+    this.currentFieldValue = '';
   }
   
   initializeSignaturePad() {
-    // The signature pad controller should handle initialization
-    // We just wait for it to be ready
-    if (this.hasSignatureCanvasTarget) {
-      // Focus on drawing area
-      this.signatureCanvasTarget.focus()
+    console.log("Initialize signature pad called - delegating to signature modal controller");
+    
+    // Find the signature modal controller
+    const signatureModalElement = document.querySelector('[data-controller="signature-modal"]');
+    
+    if (signatureModalElement) {
+      // If we have a controller instance, use it to initialize the canvas
+      const controller = signatureModalElement.__stimulusController;
+      if (controller && typeof controller.testDraw === 'function') {
+        // Get the current field type to determine which canvas to use
+        const field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue || f.dataset.fieldId === `field-${this.currentFieldValue}`);
+        if (field) {
+          const fieldType = field.dataset.fieldType;
+          const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+          controller.testDraw(canvasId);
+        }
+      }
+    } else {
+      console.warn("No signature modal controller found for canvas initialization");
     }
   }
   
   signatureComplete(event) {
-    const signatureData = event.detail.signatureData
+    console.log("Signature complete event received", event);
     
-    if (!signatureData || !this.currentFieldValue) return
+    // Try to get signature data from event or session storage
+    let signatureData = event.detail?.signatureData;
+    const fieldId = this.currentFieldValue || window.currentFieldId;
     
-    // Find the corresponding field
-    const field = this.fieldTargets.find(f => f.dataset.fieldId === this.currentFieldValue)
-    if (!field) return
+    // Check if we need to use session storage as fallback
+    if (!signatureData && sessionStorage.getItem('last_signature_data')) {
+      console.log("Using signature data from session storage");
+      signatureData = sessionStorage.getItem('last_signature_data');
+      
+      // Clear session storage to prevent reuse
+      sessionStorage.removeItem('last_signature_data');
+      sessionStorage.removeItem('last_signature_field_id');
+    }
+    
+    if (!signatureData || !fieldId) {
+      console.error("Missing signature data or field ID", { signatureData: !!signatureData, fieldId });
+      return;
+    }
+    
+    console.log(`Saving signature for field: ${fieldId}`);
+    
+    // Find the corresponding field - note we need to handle both with/without the "field-" prefix
+    let field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
+    if (!field) {
+      field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${fieldId}`);
+    }
+    
+    if (!field) {
+      console.error(`Field not found with ID: ${fieldId}`);
+      return;
+    }
     
     // Update the field with the signature
-    this.updateField(this.currentFieldValue, signatureData)
+    const processedFieldId = fieldId.replace(/^field-/, '');
+    this.updateField(processedFieldId, signatureData);
     
     // Close the modal
-    this.closeModal()
+    this.closeModal();
+    
+    // Update progress bar and field statuses
+    this.updateFieldStatuses();
   }
   
   textComplete(event) {
@@ -397,7 +563,7 @@ export default class extends Controller {
   
   updateField(fieldId, value) {
     // Find the field element
-    const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId)
+    const field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${fieldId}`)
     if (!field) return
     
     // Update the server
@@ -407,32 +573,38 @@ export default class extends Controller {
     const fieldType = field.dataset.fieldType
     
     if (fieldType === 'signature' || fieldType === 'initials') {
-      // Create an image element to show the signature
-      const img = document.createElement('img')
-      img.src = value
-      img.className = 'w-full h-full object-contain'
+      // Clear the field first
+      field.innerHTML = '';
       
-      // Clear the field and add the image
-      field.innerHTML = ''
-      field.appendChild(img)
+      // Create an image element to show the signature
+      const img = document.createElement('img');
+      img.src = value;
+      img.className = 'w-full h-full object-contain p-1';
+      
+      // Add the image
+      field.appendChild(img);
     } else if (fieldType === 'text' || fieldType === 'date') {
       // Create a div to show the text value
-      const div = document.createElement('div')
-      div.className = 'w-full h-full flex items-center justify-center text-center p-1'
-      div.textContent = value
+      const div = document.createElement('div');
+      div.className = 'w-full h-full flex items-center justify-center text-center p-2';
+      div.style.fontSize = '16px'; // Make text readable
+      div.style.fontWeight = 'normal';
+      div.textContent = value;
       
       // Clear the field and add the div
-      field.innerHTML = ''
-      field.appendChild(div)
+      field.innerHTML = '';
+      field.appendChild(div);
     }
     
     // Mark as completed
-    field.dataset.completed = "true"
-    field.classList.remove('border-dashed')
-    field.classList.add('border-solid', 'bg-gray-50')
+    field.dataset.completed = "true";
+    field.classList.remove('border-dashed');
+    field.classList.add('border-solid', 'completed');
+    field.style.border = '2px solid #4CAF50';
+    field.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
     
     // Check if all fields are completed
-    this.checkCompletionStatus()
+    this.updateFieldStatuses();
   }
   
   async saveFieldValue(fieldId, value) {
@@ -476,24 +648,26 @@ export default class extends Controller {
   }
   
   showCompletionMessage() {
-    // Create or reveal completion message
-    const completionDiv = document.createElement('div')
-    completionDiv.className = 'fixed inset-x-0 bottom-0 bg-green-50 border-t border-green-200 p-4 flex justify-between items-center z-30'
-    completionDiv.innerHTML = `
-      <div class="flex items-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        <span class="text-green-800 font-medium">All required fields completed!</span>
-      </div>
-      <button type="button" class="px-4 py-2 bg-green-600 text-white font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" data-action="field-signing#completeDocument">
-        Complete Signing
-      </button>
-    `
+    const completionMessage = document.getElementById('completion-message');
+    const submitButton = document.getElementById('document-submit-button');
     
-    // Add to page
-    document.body.appendChild(completionDiv)
-    this.completionBar = completionDiv
+    if (completionMessage) {
+      completionMessage.classList.remove('hidden');
+    }
+    
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      submitButton.classList.add('hover:bg-green-700');
+      
+      // Add a visual highlight to the button
+      submitButton.classList.add('animate-pulse');
+      setTimeout(() => {
+        submitButton.classList.remove('animate-pulse');
+      }, 2000);
+    }
+    
+    console.log("Document ready for submission - all fields completed!");
   }
   
   completeDocument() {
@@ -560,5 +734,321 @@ export default class extends Controller {
     
     // Check if all fields are completed
     this.checkCompletionStatus();
+  }
+  
+  // Add submit button to the page
+  addSubmitButton() {
+    const existingButton = document.getElementById('document-submit-button');
+    if (existingButton) return;
+    
+    // Create a submit button in case the template doesn't have one
+    const submitButton = document.createElement('button');
+    submitButton.id = 'document-submit-button';
+    submitButton.textContent = 'Sign Document';
+    submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
+    submitButton.disabled = true;
+    submitButton.setAttribute('form', 'sign-form');
+    submitButton.setAttribute('type', 'submit');
+    
+    // Find a place to add the button
+    const sidebar = document.querySelector('[data-field-signing-target="fieldsList"]');
+    if (sidebar && sidebar.parentElement) {
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'p-4 border-t border-gray-200';
+      buttonContainer.appendChild(submitButton);
+      sidebar.parentElement.appendChild(buttonContainer);
+    }
+  }
+
+  // New method to ensure all fields have click handlers
+  setupFieldClickHandlers() {
+    console.log("Setting up field click handlers");
+    
+    this.fieldTargets.forEach(field => {
+      const fieldType = field.dataset.fieldType;
+      
+      // Remove any existing click handlers to avoid duplication
+      field.removeAttribute('data-action');
+      
+      // Add the appropriate click handler based on field type
+      if (fieldType === 'text' || fieldType === 'date') {
+        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
+        
+        // Setup text field input if needed
+        if (fieldType === 'text') {
+          this.setupTextField(field);
+        } else if (fieldType === 'date') {
+          this.setupDateField(field);
+        }
+      } else if (fieldType === 'signature' || fieldType === 'initials') {
+        // Use the handleFieldClick method for all fields for consistent handling
+        field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
+      }
+      
+      console.log(`Set up ${fieldType} field: ${field.dataset.fieldId} with action: ${field.getAttribute('data-action')}`);
+    });
+  }
+
+  updateButtonState() {
+    // Enable/disable the save button based on whether the signature pad is empty
+    if (this.signaturePad && !this.signaturePad.isEmpty()) {
+      this.saveButtonTarget.disabled = false;
+      this.saveButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
+      this.saveButtonTarget.classList.add('hover:bg-blue-700');
+    } else {
+      this.saveButtonTarget.disabled = true;
+      this.saveButtonTarget.classList.add('opacity-50', 'cursor-not-allowed');
+      this.saveButtonTarget.classList.remove('hover:bg-blue-700');
+    }
+  }
+  
+  // Update field positions based on the current PDF pages in the DOM
+  updateFieldPositions() {
+    console.log("Updating field positions");
+    
+    // Check if we have a container target
+    if (!this.hasContainerTarget || !this.hasPageContainerTarget) {
+      console.error("Missing container target or page container! Cannot position fields.");
+      return;
+    }
+    
+    try {
+      // Get the container rect to calculate relative positions
+      const containerRect = this.containerTarget.getBoundingClientRect();
+      const pageContainer = this.pageContainerTarget;
+      const pageRect = pageContainer.getBoundingClientRect();
+      
+      console.log(`Page container positioned at: top=${pageRect.top}, left=${pageRect.left}, width=${pageRect.width}, height=${pageRect.height}`);
+      
+      // Find all PDF page canvases
+      const canvases = document.querySelectorAll('.pdf-page');
+      
+      if (!canvases.length) {
+        console.log("No PDF pages found yet, will try again later");
+        setTimeout(() => this.updateFieldPositions(), 500);
+        return;
+      }
+      
+      console.log(`Found ${canvases.length} PDF page canvases`);
+      
+      // For each page, position fields
+      canvases.forEach((canvas, index) => {
+        const pageNumber = index + 1;
+        const canvasRect = canvas.getBoundingClientRect();
+        
+        // Calculate page offset relative to container
+        const pageOffsetTop = canvasRect.top - containerRect.top;
+        const pageOffsetLeft = canvasRect.left - containerRect.left;
+        
+        console.log(`Page ${pageNumber} positioned at: left=${pageOffsetLeft}, top=${pageOffsetTop}, width=${canvasRect.width}, height=${canvasRect.height}`);
+        
+        // Find all fields for this page
+        const fields = this.fieldTargets.filter(field => 
+          parseInt(field.dataset.page, 10) === pageNumber
+        );
+        
+        console.log(`Found ${fields.length} fields for page ${pageNumber}`);
+        
+        fields.forEach(field => {
+          // Get the position as percentage of the page
+          const xPosPercent = parseFloat(field.dataset.xPosition);
+          const yPosPercent = parseFloat(field.dataset.yPosition);
+          
+          // Calculate absolute position within the page
+          const xPosAbsolute = (xPosPercent / 100) * canvasRect.width;
+          const yPosAbsolute = (yPosPercent / 100) * canvasRect.height;
+          
+          // Set absolute position relative to the container
+          field.style.position = 'absolute';
+          field.style.left = `${pageOffsetLeft + xPosAbsolute}px`;
+          field.style.top = `${pageOffsetTop + yPosAbsolute}px`;
+          
+          // Apply minimum sizes for better visibility
+          const fieldWidth = Math.max(parseFloat(field.dataset.width) * 1.5, 100);
+          const fieldHeight = Math.max(parseFloat(field.dataset.height) * 1.5, 40);
+          
+          field.style.width = `${fieldWidth}px`;
+          field.style.height = `${fieldHeight}px`;
+          
+          // Use transform for centering
+          field.style.transform = 'translate(-50%, -50%)';
+          
+          // Make field visible
+          field.classList.remove('hidden');
+          field.classList.add('positioned');
+          
+          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
+        });
+      });
+    } catch (error) {
+      console.error("Error positioning fields:", error);
+    }
+  }
+
+  // For direct saving of text fields
+  saveTextField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-field-signing-target="field"]');
+    const input = field.querySelector('input[type="text"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value.trim();
+    
+    if (value) {
+      this.updateField(fieldId, value);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please enter a value');
+    }
+  }
+  
+  // For direct saving of date fields
+  saveDateField(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const button = event.currentTarget;
+    const field = button.closest('[data-field-signing-target="field"]');
+    const input = field.querySelector('input[type="date"]');
+    
+    if (!field || !input) return;
+    
+    const fieldId = field.dataset.fieldId.replace('field-', '');
+    const value = input.value;
+    
+    if (value) {
+      // Format the date for display
+      const date = new Date(value);
+      const formattedDate = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      this.updateField(fieldId, formattedDate);
+      this.updateFieldStatuses();
+    } else {
+      alert('Please select a date');
+    }
+  }
+  
+  // Handle input changes (not submitting yet)
+  handleInputChange(event) {
+    // Enable save button when typing starts
+    const field = event.currentTarget.closest('[data-field-signing-target="field"]');
+    const saveButton = field.querySelector('button');
+    if (saveButton) {
+      saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      saveButton.disabled = false;
+    }
+  }
+  
+  // Handle input blur (focus lost)
+  handleInputBlur(event) {
+    const input = event.currentTarget;
+    const field = input.closest('[data-field-signing-target="field"]');
+    if (!field) return;
+    
+    // Don't auto-save as we want explicit save button clicks
+  }
+  
+  // Update the status of all fields and check completion
+  updateFieldStatuses() {
+    // Check if all required fields are completed
+    const allRequiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+    const completedFields = allRequiredFields.filter(field => field.dataset.completed === "true");
+    const allCompleted = allRequiredFields.length > 0 && completedFields.length === allRequiredFields.length;
+    
+    console.log(`Field completion: ${completedFields.length}/${allRequiredFields.length} fields completed`);
+    
+    // Update field statuses in the sidebar
+    if (this.hasFieldsListTarget) {
+      const statusItems = this.fieldsListTarget.querySelectorAll('.field-status-item');
+      statusItems.forEach(item => {
+        const fieldId = item.dataset.fieldId;
+        const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
+        
+        if (field && field.dataset.completed === "true") {
+          item.dataset.fieldStatus = "completed";
+          item.querySelector('.field-status').classList.remove('bg-gray-300');
+          item.querySelector('.field-status').classList.add('bg-green-500');
+        }
+      });
+    }
+    
+    // Update progress bar
+    this.updateProgressBar(completedFields.length, allRequiredFields.length);
+    
+    // Enable/disable submit button
+    const submitButton = document.getElementById('document-submit-button');
+    if (submitButton) {
+      if (allCompleted) {
+        submitButton.disabled = false;
+        submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        submitButton.classList.add('hover:bg-green-700');
+      } else {
+        submitButton.disabled = true;
+        submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+        submitButton.classList.remove('hover:bg-green-700');
+      }
+    }
+    
+    // If all completed, show completion UI
+    if (allCompleted) {
+      this.showCompletionMessage();
+    }
+  }
+  
+  // Update progress bar in the sidebar
+  updateProgressBar(completed = null, total = null) {
+    if (!this.hasProgressBarTarget || !this.hasCompletedCountTarget || !this.hasTotalCountTarget) return;
+    
+    if (completed === null || total === null) {
+      const allRequiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+      const completedFields = allRequiredFields.filter(field => field.dataset.completed === "true");
+      
+      completed = completedFields.length;
+      total = allRequiredFields.length;
+    }
+    
+    // Update count text
+    this.completedCountTarget.textContent = completed;
+    this.totalCountTarget.textContent = total;
+    
+    // Update progress bar width
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    this.progressBarTarget.style.width = `${percentage}%`;
+    
+    // Change color based on progress
+    if (percentage === 100) {
+      this.progressBarTarget.classList.remove('bg-blue-500');
+      this.progressBarTarget.classList.add('bg-green-500');
+    } else {
+      this.progressBarTarget.classList.add('bg-blue-500');
+      this.progressBarTarget.classList.remove('bg-green-500');
+    }
+  }
+  
+  // Scroll to a field when clicked in the sidebar
+  scrollToField(event) {
+    const item = event.currentTarget;
+    const fieldId = item.dataset.fieldId;
+    const field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
+    
+    if (field) {
+      // Highlight the field briefly
+      field.classList.add('highlight-field');
+      setTimeout(() => {
+        field.classList.remove('highlight-field');
+      }, 2000);
+      
+      // Scroll the field into view
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 } 

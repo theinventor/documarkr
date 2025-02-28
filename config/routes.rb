@@ -18,6 +18,11 @@ Rails.application.routes.draw do
       post :send_to_signers
       post :resend_signing_email, path: "signers/:signer_id/resend"
     end
+
+    # Add finalize route
+    get "finalize", to: "finalize#show", as: "finalize", defaults: { format: "html" }
+    get "finalize.pdf", to: "finalize#show", defaults: { format: "pdf" }
+
     resources :document_signers, only: [ :new, :create, :destroy, :index ]
     resources :form_fields, only: [ :create, :update, :destroy, :index ] do
       collection do
@@ -27,6 +32,11 @@ Rails.application.routes.draw do
 
     # Form field completion
     # post "form_fields/:field_id/complete", to: "documents#complete_field", as: "complete_field"
+
+    # Add the finalize routes
+    resource :finalize, only: [ :show ], controller: :finalize do
+      post :export_pdf
+    end
   end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
