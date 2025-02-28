@@ -20,7 +20,7 @@
       data-field-signing-document-id-value="<%= @document.id %>"
       data-field-signing-signer-id-value="<%= @document_signer.id %>"
       data-field-signing-token-value="<%= @token %>"
-      data-field-signing-complete-redirect-url-value="<%= public_sign_complete_view_path(@document) %>">
+      data-field-signing-complete-redirect-url-value="<%= public_sign_thank_you_path(@document, token: @token) %>">
       
       <!-- Field status sidebar - REDUCED WIDTH AND TEXT SIZE -->
       <div class="w-full md:w-40 lg:w-48 bg-white border-r border-gray-200 flex flex-col">

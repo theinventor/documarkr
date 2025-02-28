@@ -16,7 +16,14 @@ class DocumentMailer < ApplicationMailer
   def completion_notification(document)
     @document = document
     @creator = @document.creator
-    @document_url = Rails.application.routes.url_helpers.document_url(@document)
+
+    # Set the host for URL generation
+    host_options = {
+      host: Rails.application.config.action_mailer.default_url_options[:host],
+      port: Rails.application.config.action_mailer.default_url_options[:port]
+    }
+
+    @document_url = Rails.application.routes.url_helpers.document_url(@document, host_options)
 
     mail(
       to: @creator.email,

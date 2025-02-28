@@ -7,9 +7,11 @@ Rails.application.routes.draw do
   end
 
   # Public document signing routes (no authentication required)
+  # Order matters - more specific routes first
+  get "sign/:id/thank_you", to: "public_signing#thank_you", as: "public_sign_thank_you"
+  get "sign/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
   get "sign/:id/:token", to: "public_signing#show", as: "public_sign_document"
   post "sign/:id", to: "public_signing#sign_complete", as: "public_sign_complete"
-  get "sign/:id/complete", to: "public_signing#complete", as: "public_sign_complete_view"
   post "sign/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
 
   resources :documents do

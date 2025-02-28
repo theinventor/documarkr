@@ -1,6 +1,6 @@
 class PublicSigningController < ApplicationController
   # Skip authentication for all actions in this controller
-  skip_before_action :authenticate_user!
+  skip_before_action :authenticate_user!, only: [ :show, :sign_complete, :complete, :complete_field, :thank_you ]
 
   # GET /sign/:id/:token
   def show
@@ -29,7 +29,17 @@ class PublicSigningController < ApplicationController
 
     # Verify all required fields are completed
     unless @document_signer.completed_all_required_fields?
-      render json: { error: "Please complete all required fields before submitting." }, status: :unprocessable_entity
+      respond_to do |format|
+        format.turbo_stream {
+          flash[:alert] = "Please complete all required fields before submitting."
+          redirect_to public_sign_document_path(@document, token: @token)
+        }
+        format.json { render json: { error: "Please complete all required fields before submitting." }, status: :unprocessable_entity }
+        format.html {
+          flash[:alert] = "Please complete all required fields before submitting."
+          redirect_to public_sign_document_path(@document, token: @token)
+        }
+      end
       return
     end
 
@@ -43,17 +53,48 @@ class PublicSigningController < ApplicationController
     @document.log_activity(nil, "signed", request, {
       signer_id: @document_signer.id,
       signer_email: @document_signer.email,
-      signer_name: @document_signer.name
+      signer_name: @document_signer.name,
+      token: @token
     })
 
-    render json: { success: true, redirect_url: public_sign_complete_view_path(@document) }
+    # Handle successful completion with different format responses
+    respond_to do |format|
+      format.turbo_stream {
+        Rails.logger.info "Redirecting to thank_you page with token: #{@token}"
+        redirect_to public_sign_thank_you_path(@document, token: @token)
+      }
+      format.json { render json: { success: true, redirect_url: public_sign_thank_you_path(@document, token: @token) } }
+      format.html {
+        Rails.logger.info "Redirecting to thank_you page with token: #{@token}"
+        redirect_to public_sign_thank_you_path(@document, token: @token)
+      }
+    end
   rescue ActiveRecord::RecordNotFound
-    render json: { error: "Invalid document or signing link." }, status: :not_found
+    respond_to do |format|
+      format.turbo_stream {
+        flash[:alert] = "Invalid document or signing link."
+        redirect_to root_path
+      }
+      format.json { render json: { error: "Invalid document or signing link." }, status: :not_found }
+      format.html {
+        flash[:alert] = "Invalid document or signing link."
+        redirect_to root_path
+      }
+    end
   end
 
   # GET /sign/:id/complete
   def complete
+    @token = params[:token]
     @document = Document.find(params[:id])
+
+    # If token is provided, find the signer for context
+    if @token.present?
+      @document_signer = @document.document_signers.find_by(token: @token)
+    end
+
+    # We've reached the completion page, so render it even if we can't find the signer
+    # This ensures the completion page is shown to the user
     render :complete
   rescue ActiveRecord::RecordNotFound
     flash[:alert] = "Document not found."
@@ -83,5 +124,26 @@ class PublicSigningController < ApplicationController
     else
       render json: { error: @form_field.errors.full_messages.join(", ") }, status: :unprocessable_entity
     end
+  end
+
+  # GET /sign/:id/thank_you
+  def thank_you
+    @document = Document.find_by(id: params[:id])
+    @token = params[:token]
+
+    # If document not found, show a generic thank you page
+    if @document.nil?
+      Rails.logger.warn "Document not found for thank_you page, document_id=#{params[:id]}, token=#{@token}"
+      render :generic_thank_you and return
+    end
+
+    # If token is provided, try to find the signer, but don't require it
+    if @token.present?
+      @document_signer = @document.document_signers.find_by(token: @token)
+      Rails.logger.info "Signer found: #{@document_signer.present?}, document_id=#{@document.id}, token=#{@token}"
+    end
+
+    # Render the thank you page regardless of token validity
+    render :thank_you
   end
 end

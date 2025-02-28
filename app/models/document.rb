@@ -60,8 +60,22 @@ class Document < ApplicationRecord
     metadata = { timestamp: Time.current }
     metadata.merge!(additional_metadata) if additional_metadata.present?
 
+    # If user is nil (for public signing), use the document creator instead
+    user_to_log = user || creator
+
+    # If this is a public signing (token is present in the metadata), add signer information
+    if user.nil? && metadata[:token].present?
+      # Find the document_signer by token
+      signer = document_signers.find_by(token: metadata[:token])
+      if signer
+        metadata[:signer_email] = signer.email
+        metadata[:signer_name] = signer.name
+        metadata[:public_signing] = true
+      end
+    end
+
     audit_logs.create!(
-      user: user,
+      user: user_to_log, # Use creator as fallback since user_id can't be null
       action: action,
       ip_address: request&.remote_ip,
       user_agent: request&.user_agent,
@@ -81,6 +95,7 @@ class Document < ApplicationRecord
 
   # Generate a signing URL for a specific signer
   def signing_url_for(signer)
+    # March 2, 2024: Updated to use new route structure with /view and token as query param
     Rails.application.routes.url_helpers.public_sign_document_url(
       id: self.id,
       token: signer.token,

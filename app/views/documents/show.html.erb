@@ -74,6 +74,55 @@
       </div>
     </div>
 
+    <!-- Document Actions - moved from below -->
+    <div class="mb-6">
+      <h2 class="text-lg font-medium text-gray-900 mb-4">Actions</h2>
+      <div class="flex flex-wrap gap-2">
+        <% if @document.draft? && @document.document_signers.any? %>
+          <%= link_to send_to_signers_document_path(@document), data: { turbo_method: :post, turbo_confirm: "Are you sure you want to send this document to #{@document.document_signers.order(:sign_order).first.name} for signing?" }, class: "inline-flex items-center justify-center font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 px-3 py-1.5 text-sm leading-4 border border-transparent text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500" do %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" />
+            </svg>
+            Send Now
+          <% end %>
+        <% end %>
+        
+        <% if @document.file.attached? %>
+          <%= link_to download_document_path(@document), class: button_classes(:primary) do %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+            Download Original
+          <% end %>
+        <% end %>
+        
+        <% if @document.completed_file.attached? %>
+          <%= link_to download_document_path(@document), class: button_classes(:success) do %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+            Download Signed Document
+          <% end %>
+        <% end %>
+        
+        <% if @document.editable_by?(current_user) %>
+          <%= link_to edit_document_path(@document), class: button_classes(:secondary) do %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+            Edit Document
+          <% end %>
+        <% end %>
+        
+        <%= link_to documents_path, class: button_classes(:outline) do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+          Back to Dashboard
+        <% end %>
+      </div>
+    </div>
+
     <div 
       data-controller="pdf-viewer" 
       data-pdf-viewer-url-value="<%= rails_blob_path(@document.file) if @document.file.attached? %>"
@@ -163,55 +212,6 @@
           <h3 class="text-sm font-medium text-gray-700 mb-2">Message</h3>
           <p class="text-sm text-gray-900"><%= @document.message %></p>
         </div>
-      <% end %>
-    </div>
-  </div>
-
-  <!-- Document Actions -->
-  <div class="<%= card_classes %> mt-6">
-    <h2 class="text-lg font-medium text-gray-900 mb-4">Actions</h2>
-    <div class="flex flex-wrap gap-2">
-      <% if @document.draft? && @document.document_signers.any? %>
-        <%= link_to send_to_signers_document_path(@document), data: { turbo_method: :post, turbo_confirm: "Are you sure you want to send this document to #{@document.document_signers.order(:sign_order).first.name} for signing?" }, class: "inline-flex items-center justify-center font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 px-3 py-1.5 text-sm leading-4 border border-transparent text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500" do %>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" />
-          </svg>
-          Send Now
-        <% end %>
-      <% end %>
-      
-      <% if @document.file.attached? %>
-        <%= link_to download_document_path(@document), class: button_classes(:primary) do %>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-          </svg>
-          Download Original
-        <% end %>
-      <% end %>
-      
-      <% if @document.completed_file.attached? %>
-        <%= link_to download_document_path(@document), class: button_classes(:success) do %>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-          </svg>
-          Download Signed Document
-        <% end %>
-      <% end %>
-      
-      <% if @document.editable_by?(current_user) %>
-        <%= link_to edit_document_path(@document), class: button_classes(:secondary) do %>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-          </svg>
-          Edit Document
-        <% end %>
-      <% end %>
-      
-      <%= link_to documents_path, class: button_classes(:outline) do %>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-        </svg>
-        Back to Dashboard
       <% end %>
     </div>
   </div>
