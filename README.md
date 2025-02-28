@@ -10,6 +10,17 @@ Documarkr is an open-source document signing platform similar to DocuSign, but w
 - **Signature Options**: Draw signature images
 - **Security & Audit**: Comprehensive audit trails with metadata tracking (IP, email, timestamp, user agent)
 
+![CleanShot 2025-02-27 at 22 44 59@2x](https://github.com/user-attachments/assets/5d4d166f-383f-4bb8-83ee-2743cfe6aac1)
+
+![CleanShot 2025-02-27 at 22 46 31@2x](https://github.com/user-attachments/assets/58137d2b-2f1b-4867-82ea-c926aa051b48)
+
+![CleanShot 2025-02-27 at 22 47 15@2x](https://github.com/user-attachments/assets/f3101a8a-c6af-4928-a4d6-1fd187faa9c3)
+
+![CleanShot 2025-02-27 at 22 47 47@2x](https://github.com/user-attachments/assets/4c1e33df-a705-4665-9a75-4dec48698e41)
+
+
+
+
 ## Tech Stack
 
 ### Backend
