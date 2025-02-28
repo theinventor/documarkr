@@ -562,10 +562,14 @@ export default class EditorFieldPlacementController extends Controller {
       return
     }
     
+    // Ensure fieldId is properly formatted with db- prefix
+    const listFieldId = fieldId.toString().startsWith('db-') ? fieldId : `db-${fieldId}`
+    console.log(`Adding field to list with ID: ${listFieldId}`)
+    
     // Create a list item for the field
     const listItem = document.createElement("li")
     listItem.classList.add("py-2", "px-3", "border-b", "border-gray-200", "flex", "justify-between", "items-center")
-    listItem.dataset.fieldId = fieldId
+    listItem.dataset.fieldId = fieldId // Keep the original ID format for consistency with the server
     listItem.dataset.page = fieldData.page_number // Add page attribute for filtering
     
     // Create text content with field type and page number
@@ -602,7 +606,7 @@ export default class EditorFieldPlacementController extends Controller {
     // Create delete button
     const deleteButton = document.createElement("button")
     deleteButton.classList.add("text-red-600", "hover:text-red-800")
-    deleteButton.dataset.action = "field-placement#deleteField"
+    deleteButton.dataset.action = "editor-field-placement#deleteField"
     deleteButton.dataset.fieldId = fieldId
     deleteButton.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -622,30 +626,52 @@ export default class EditorFieldPlacementController extends Controller {
     const fieldId = event.currentTarget.dataset.fieldId
     console.log(`Deleting field: ${fieldId}`)
     
-    // Find the field in our array
-    const fieldIndex = this.fields.findIndex(field => field.id === fieldId)
+    let fieldIndex = -1
+    const numericId = parseInt(fieldId)
+    
+    // First try to find by serverId (for numeric IDs from list)
+    if (!isNaN(numericId)) {
+      console.log(`Searching for field with serverId: ${numericId}`)
+      fieldIndex = this.fields.findIndex(field => field.serverId === numericId)
+    } 
+    
+    // If not found, try with db- prefix (for element IDs)
+    if (fieldIndex === -1) {
+      const prefixedId = fieldId.toString().startsWith('db-') ? fieldId : `db-${fieldId}`
+      console.log(`Searching for field with element id: ${prefixedId}`)
+      fieldIndex = this.fields.findIndex(field => field.id === prefixedId)
+    }
+    
+    console.log(`Field index found: ${fieldIndex}`)
     
     if (fieldIndex !== -1) {
       const field = this.fields[fieldIndex]
+      console.log(`Found field to delete:`, field)
       
       // Remove the field element from the DOM
       if (field.element && field.element.parentNode) {
         field.element.parentNode.removeChild(field.element)
+        console.log(`Removed field element from DOM`)
       }
       
       // If the field has a server ID, delete it from the server
       if (field.serverId) {
+        console.log(`Deleting field from server with serverId: ${field.serverId}`)
         this.deleteFieldFromServer(field.serverId)
       }
       
       // Remove the field from our array
       this.fields.splice(fieldIndex, 1)
+      console.log(`Removed field from fields array. Fields remaining: ${this.fields.length}`)
+    } else {
+      console.warn(`Could not find field with id: ${fieldId} in fields array`)
     }
     
     // Remove the list item from the DOM
     const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${fieldId}"]`)
     if (listItem) {
       listItem.parentNode.removeChild(listItem)
+      console.log(`Removed field from sidebar list`)
     }
   }
 
