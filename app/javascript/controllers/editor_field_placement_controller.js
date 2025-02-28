@@ -15,53 +15,54 @@ export default class EditorFieldPlacementController extends Controller {
     console.log("%cEDITOR FIELD PLACEMENT CONTROLLER CONNECTED!!!", "color: green; font-weight: bold; font-size: 24px;");
     console.log("%c██████████████████████████████████████████████████", "color: green; font-size: 20px;");
     
-    console.log("Field Placement Controller connected")
-    this.selectedFieldType = null
-    this.fields = []
-    this.currentPage = 1
-    this.lastKnownPdfScale = 1.0 // Add tracking for PDF scale
+    console.log("Editor Field Placement Controller connected");
     
-    // Enhanced debugging on connection
-    console.log("Controller values initialized:")
-    console.log(`- Document ID: ${this.documentIdValue}`)
-    console.log(`- Current page: ${this.currentPage}`)
-    console.log(`- Mode: ${this.modeValue}`)
+    // Initialize properties
+    this.fields = [];
+    this.selectedFieldType = null;
+    this.currentPage = 1;
+    this.lastKnownPdfScale = 1.0; // Add tracking for PDF scale
+    this.signerIdValue = null;
+    this.autoResetAfterPlacement = true;
+    this.isResizing = false;
+    this.isPlacingField = false;
     
-    // Initialize
-    this.setupEventListeners()
+    // Create bound methods for event listeners
+    this.boundHandleResize = this.handleResize.bind(this);
+    this.boundHandleResizeEnd = this.handleResizeEnd.bind(this);
     
-    // Check for targets after DOM is fully loaded
-    setTimeout(() => {
-      this.checkTargets()
-      
-      // Debug the state of the buttons
-      this.debugButtonState()
-      
-      // If a signer is already selected, enable the buttons
-      if (this.hasSignerSelectTarget && this.signerSelectTarget.value) {
-        console.log(`Signer already selected: ${this.signerSelectTarget.value}`)
-        this.signerIdValue = this.signerSelectTarget.value
-        this.enableToolbarButtons()
-      }
-      
-      // Enhance the signer dropdown with color indicators
-      this.enhanceSignerDropdown()
-    }, 500) // Reduced from 1000ms to 500ms
+    this.checkTargets();
+    this.setupEventListeners();
     
-    // Load existing fields for current page
-    this.loadFieldsForCurrentPage()
-
-    // Listen for PDF scale changes
-    this.listenForPdfScaleChanges()
+    // Load fields for the current document
+    if (this.hasContainerTarget) {
+      this.loadFieldsForCurrentPage();
+    }
     
-    // Listen for PDF page changes
-    this.listenForPdfPageChanges()
-
-    // Listen for page change events from the PDF viewer
-    document.addEventListener('pdf-viewer:pageChanged', this.handlePdfPageChange.bind(this));
+    // Setup zooming listeners for handling PDF scale changes
+    this.listenForPdfScaleChanges();
     
-    // Listen for the fields visibility check event
-    document.addEventListener('pdf-viewer:fieldsCheck', this.verifyFieldsVisibility.bind(this));
+    // Listen for page changes
+    this.listenForPdfPageChanges();
+    
+    // Add Window resize listener
+    window.addEventListener('resize', this.handleWindowResize.bind(this));
+    
+    // Add document-level mouse events for field placement
+    if (this.hasContainerTarget) {
+      this.containerTarget.addEventListener('mousedown', this.handleMouseDown.bind(this));
+      document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+      document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    }
+    
+    // Add key event listener for handling escape
+    document.addEventListener('keydown', this.handleKeyDown.bind(this));
+    
+    // Listen for custom events from the pdf-viewer controller
+    document.addEventListener('pdf-viewer:page-change', this.handlePdfPageChange.bind(this));
+    
+    // Enhance signer dropdown visuals
+    this.enhanceSignerDropdown();
   }
   
   // New method to check if targets are properly connected
@@ -101,12 +102,19 @@ export default class EditorFieldPlacementController extends Controller {
   }
 
   disconnect() {
+    console.log("Editor Field Placement Controller disconnected");
+    
+    // Clean up event listeners
+    window.removeEventListener('resize', this.handleWindowResize.bind(this));
+    document.removeEventListener('keydown', this.handleKeyDown.bind(this));
+    document.removeEventListener('pdf-viewer:page-change', this.handlePdfPageChange.bind(this));
+    document.removeEventListener('mousemove', this.boundHandleResize);
+    document.removeEventListener('mouseup', this.boundHandleResizeEnd);
+    
     if (this.hasContainerTarget) {
-      this.containerTarget.removeEventListener("mousedown", this.handleMouseDown.bind(this))
-      window.removeEventListener("mousemove", this.handleMouseMove.bind(this))
-      window.removeEventListener("mouseup", this.handleMouseUp.bind(this))
-      document.removeEventListener("keydown", this.handleKeyDown.bind(this))
-      window.removeEventListener("resize", this.handleWindowResize.bind(this))
+      this.containerTarget.removeEventListener('mousedown', this.handleMouseDown.bind(this));
+      document.removeEventListener('mousemove', this.handleMouseMove.bind(this));
+      document.removeEventListener('mouseup', this.handleMouseUp.bind(this));
     }
   }
   
@@ -485,7 +493,7 @@ export default class EditorFieldPlacementController extends Controller {
       console.log("Escape key pressed");
       
       // If we're in resize mode, cancel the resize
-      if (this.isResizing) {
+      if (this.isResizing || this.resizeData) {
         console.log("Canceling resize operation");
         
         // Restore the original size and position if available in resize data
@@ -511,6 +519,10 @@ export default class EditorFieldPlacementController extends Controller {
         this.resizeHandle = null;
         this.activeFieldElement = null;
         
+        // Remove event listeners that might still be active
+        window.removeEventListener('mousemove', this.boundHandleResize);
+        window.removeEventListener('mouseup', this.boundHandleResizeEnd);
+        
         // Restore cursor styles
         document.body.style.cursor = 'default';
         this.containerTarget.style.cursor = 'default';
@@ -533,8 +545,8 @@ export default class EditorFieldPlacementController extends Controller {
         return;
       }
       
-      // If an active field element exists, remove it
-      if (this.activeFieldElement && this.selectedFieldType) {
+      // If an active field element exists but we're not in resize mode, remove it
+      if (this.activeFieldElement && this.selectedFieldType && !this.isResizing) {
         console.log("Removing active field element");
         this.containerTarget.removeChild(this.activeFieldElement);
         this.activeFieldElement = null;
@@ -723,125 +735,105 @@ export default class EditorFieldPlacementController extends Controller {
   }
 
   addFieldFromServer(fieldData) {
-    console.log("Adding field from server:", fieldData);
+    console.log(`Adding field from server: ${JSON.stringify(fieldData)}`);
     
-    // Create a field element
-    const fieldElement = document.createElement('div');
-    fieldElement.className = `signature-field field-${fieldData.field_type}`;
+    // Check if the field is on the current page
+    if (fieldData.page_number !== this.currentPage) {
+      console.log(`Field is on page ${fieldData.page_number}, not adding to current page ${this.currentPage}`);
+      return;
+    }
+    
+    // Create a field element for this data
+    const fieldElement = document.createElement("div");
+    fieldElement.classList.add("signature-field", `field-${fieldData.field_type}`);
+    fieldElement.style.position = "absolute";
+    
+    // Generate ID using database ID
+    const fieldId = `db-${fieldData.id}`;
+    fieldElement.id = fieldId;
     
     // Add signer-specific class for color coding
     if (fieldData.document_signer_id) {
       // Get the signer index from the signerSelect dropdown
       const signerIndex = this.getSignerIndexById(fieldData.document_signer_id);
+      console.log(`Getting signer index for ID: ${fieldData.document_signer_id}`);
       if (signerIndex > 0) {
         // Add signer class (signer-1, signer-2, etc.)
         fieldElement.classList.add(`signer-${signerIndex}`);
       }
     }
     
-    // Set the ID with db- prefix to indicate it's from the database
-    fieldElement.id = `db-${fieldData.id}`;
-    fieldElement.dataset.fieldId = fieldData.id;
-    fieldElement.dataset.page = fieldData.page_number; // Add page attribute for filtering
-    fieldElement.dataset.signerId = fieldData.document_signer_id; // Store signer ID for reference
+    // Set position and dimensions from database values
+    fieldElement.style.left = `${fieldData.x_position}%`;
+    fieldElement.style.top = `${fieldData.y_position}%`;
+    fieldElement.style.width = `${fieldData.width}%`;
+    fieldElement.style.height = `${fieldData.height}%`;
     
-    // Calculate position in percentages
-    const xPercent = fieldData.x_position;
-    const yPercent = fieldData.y_position;
-    const widthPercent = fieldData.width;
-    const heightPercent = fieldData.height;
+    // Create field label with icon
+    const labelElement = document.createElement("div");
+    labelElement.classList.add("field-label");
     
-    // Set position and size using percentage values
-    fieldElement.style.left = `${xPercent}%`;
-    fieldElement.style.top = `${yPercent}%`;
-    fieldElement.style.width = `${widthPercent}%`;
-    fieldElement.style.height = `${heightPercent}%`;
+    // Add icon based on field type
+    let iconSvg = "";
     
-    // Set visibility based on current page - make sure fields are visible
-    if (parseInt(fieldData.page_number) === this.currentPage) {
-      fieldElement.style.display = 'block';
-    } else {
-      fieldElement.style.display = 'none';
+    switch (fieldData.field_type) {
+      case "signature":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>';
+        break;
+      case "initials":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>';
+        break;
+      case "text":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+        break;
+      case "date":
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        break;
+      default:
+        iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
     }
     
-    // Apply scale transform if we have a non-default scale
-    if (this.lastKnownPdfScale && this.lastKnownPdfScale !== 1.0) {
-      fieldElement.style.transform = `scale(${this.lastKnownPdfScale})`;
-      fieldElement.style.transformOrigin = 'top left';
-    }
+    labelElement.innerHTML = iconSvg;
+    fieldElement.appendChild(labelElement);
     
-    // Make sure fields stay on top of the PDF content
-    fieldElement.style.zIndex = '100';
-
-    // Make sure we add the element to the correct container
-    if (this.hasContainerTarget) {
-      // Create a field label element
-      const labelElement = document.createElement('div');
-      labelElement.className = 'field-label';
-      
-      // Add appropriate icon for the field type
-      let fieldIcon = ''
-      switch (fieldData.field_type) {
-        case 'signature':
-          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>'
-          break
-        case 'initials':
-          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>'
-          break
-        case 'text':
-          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-          break
-        case 'date':
-          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
-          break
-        default:
-          fieldIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>'
-      }
-      
-      labelElement.innerHTML = fieldIcon
-      fieldElement.appendChild(labelElement)
-      
-      // Add trash icon for deleting the field
-      const deleteButton = document.createElement('div')
-      deleteButton.className = 'field-delete-button'
-      deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>'
-      deleteButton.dataset.action = 'click->editor-field-placement#deleteFieldFromPdf'
-      deleteButton.dataset.fieldId = fieldData.id
-      fieldElement.appendChild(deleteButton)
-      
-      // Add resize handles
-      this.addResizeHandles(fieldElement)
-      
-      // Add the field element to the container
-      this.containerTarget.appendChild(fieldElement)
-      
-      // Log that we've added the field to the container
-      console.log(`Added field to container: ${fieldData.field_type} (ID: ${fieldData.id}) - Visibility: ${fieldElement.style.display}`);
-    } else {
-      console.error("Container target not found, cannot add field to DOM");
-    }
+    // Add trash icon for deleting the field
+    const deleteButton = document.createElement('div');
+    deleteButton.className = 'field-delete-button';
+    deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    deleteButton.dataset.action = 'click->editor-field-placement#deleteFieldFromPdf';
+    deleteButton.dataset.fieldId = fieldData.id;
+    fieldElement.appendChild(deleteButton);
     
-    // Add to fields array with complete data
+    // Add resize handles
+    this.addResizeHandles(fieldElement);
+    
+    // Add field to container
+    this.containerTarget.appendChild(fieldElement);
+    
+    // Check if field is actually visible in DOM
+    const fieldDisplayStyle = window.getComputedStyle(fieldElement).display;
+    console.log(`Added field to container: ${fieldData.field_type} (ID: ${fieldData.id}) - Visibility: ${fieldDisplayStyle}`);
+    
+    // Add to fields array for tracking
     const fieldObj = {
-      serverId: fieldData.id,
+      id: fieldId,
+      serverId: fieldData.id, // Store the server ID separately
       field_type: fieldData.field_type,
-      document_id: this.documentIdValue,
+      document_id: fieldData.document_id,
       document_signer_id: fieldData.document_signer_id,
-      page_number: parseInt(fieldData.page_number),
-      x_position: xPercent,
-      y_position: yPercent,
-      width: widthPercent,
-      height: heightPercent,
+      page_number: fieldData.page_number,
+      x_position: fieldData.x_position,
+      y_position: fieldData.y_position,
+      width: fieldData.width,
+      height: fieldData.height,
       required: fieldData.required,
       element: fieldElement
-    }
+    };
     
-    this.fields.push(fieldObj)
+    this.fields.push(fieldObj);
     
-    // Add to the fields list in the UI
-    this.addFieldToList(fieldObj.serverId, fieldData)
-    
-    return fieldObj
+    // Add to the fields list in the sidebar
+    this.addFieldToList(fieldData.id, fieldData);
   }
 
   saveField(fieldData, fieldId) {
@@ -1023,6 +1015,10 @@ export default class EditorFieldPlacementController extends Controller {
     // Store the handle element
     this.resizeHandle = event.target;
     
+    // Add global event listeners for mouse events
+    document.addEventListener('mousemove', this.boundHandleResize);
+    document.addEventListener('mouseup', this.boundHandleResizeEnd);
+    
     event.preventDefault();
     event.stopPropagation();
   }
@@ -1073,58 +1069,96 @@ export default class EditorFieldPlacementController extends Controller {
   }
 
   handleResizeEnd(event) {
-    if (!this.isResizing || !this.activeFieldElement || !this.resizeData) {
-      return
-    }
-
-    // Log resize end event for debugging
-    console.log('Resize end', this.resizeData);
-
-    // Complete the resize operation
-    this.isResizing = false;
+    console.log("Resize end", this.resizeData);
     
-    // Get the field from the resize data
-    const fieldId = this.resizeData.fieldId;
-    const field = this.fields.find(f => f.id === fieldId);
-    
-    if (!field) {
-      console.error('Field not found for resize end operation:', fieldId);
+    if (!this.resizeData || !this.activeFieldElement) {
+      console.warn("No resize data available for resize end operation");
       return;
     }
     
-    // Get the updated position and size from the field element
-    const containerRect = this.containerTarget.getBoundingClientRect();
-    const fieldRect = this.activeFieldElement.getBoundingClientRect();
+    // Determine field ID and find the field in the fields array
+    const fieldId = this.activeFieldElement.id;
+    console.log(`Finding field for resize end operation: ${fieldId}`);
     
-    // Calculate position and size as percentages of container
-    const left = (fieldRect.left - containerRect.left) / containerRect.width * 100;
-    const top = (fieldRect.top - containerRect.top) / containerRect.height * 100;
-    const width = fieldRect.width / containerRect.width * 100;
-    const height = fieldRect.height / containerRect.height * 100;
+    let field;
     
-    // Update the field data
-    field.x_position = left;
-    field.y_position = top;
-    field.width = width;
-    field.height = height;
+    // Check if this is a database field (starts with 'db-')
+    if (fieldId.startsWith('db-')) {
+      // For database fields, we need to extract the numeric ID and find by serverId
+      const dbId = parseInt(fieldId.substring(3)); // Remove 'db-' prefix and convert to integer
+      console.log(`Looking for database field with server ID: ${dbId}`);
+      
+      // Find the field with matching serverId
+      field = this.fields.find(f => f.serverId === dbId);
+    } else {
+      // For regular fields, find by ID directly
+      field = this.fields.find(f => f.id === fieldId);
+    }
     
-    // Send updated field data to server
-    this.updateFieldOnServer(field);
+    if (!field) {
+      console.error(`Field not found for resize end operation: ${fieldId}`);
+      
+      // Ensure we clean up properly even if field is not found
+      this.activeFieldElement = null;
+      this.resizeData = null;
+      document.body.style.cursor = 'default';
+      this.containerTarget.style.cursor = 'default';
+      
+      // Remove the global event listeners
+      window.removeEventListener('mousemove', this.boundHandleResize);
+      window.removeEventListener('mouseup', this.boundHandleResizeEnd);
+      
+      return;
+    }
     
-    // Clear resize data
-    this.resizeData = null;
+    // Get the new position and dimensions as percentages
+    const boundingRect = this.containerTarget.getBoundingClientRect();
+    const containerWidth = boundingRect.width;
+    const containerHeight = boundingRect.height;
     
-    // Clear active field element reference to prevent stuck states
+    // Calculate the actual resized dimensions
+    const newWidth = parseFloat(this.activeFieldElement.style.width);
+    const newHeight = parseFloat(this.activeFieldElement.style.height);
+    const newLeft = parseFloat(this.activeFieldElement.style.left);
+    const newTop = parseFloat(this.activeFieldElement.style.top);
+    
+    // Update the field object with the new values
+    field.width = newWidth;
+    field.height = newHeight;
+    field.x_position = newLeft;
+    field.y_position = newTop;
+    
+    // Update the field on the server via API call
+    const fieldData = {
+      field_type: field.field_type,
+      document_id: field.document_id,
+      document_signer_id: field.document_signer_id,
+      page_number: field.page_number,
+      x_position: newLeft,
+      y_position: newTop,
+      width: newWidth,
+      height: newHeight,
+      required: field.required
+    };
+    
+    // If it's an existing field (from database), update it
+    if (fieldId.startsWith('db-')) {
+      const dbId = parseInt(fieldId.substring(3));
+      this.updateField(dbId, fieldData);
+    } else {
+      // For newly created fields, send a create request
+      this.saveField(fieldData);
+    }
+    
+    // Reset resize state
     this.activeFieldElement = null;
-    
-    // Reset cursor styles
+    this.resizeData = null;
     document.body.style.cursor = 'default';
     this.containerTarget.style.cursor = 'default';
     
-    // Reset any other resize-related state
-    if (this.resizeHandle) {
-      this.resizeHandle = null;
-    }
+    // Remove the global event listeners
+    window.removeEventListener('mousemove', this.boundHandleResize);
+    window.removeEventListener('mouseup', this.boundHandleResizeEnd);
   }
 
   updateFieldOnServer(field) {
@@ -1481,24 +1515,19 @@ export default class EditorFieldPlacementController extends Controller {
     
     // Add icon based on field type
     let iconSvg = "";
-    let labelText = "";
     
     switch (fieldData.field_type) {
       case "signature":
         iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="signature-icon"><path d="M15 3h6v6M14 10l7-7m-7 17H4a2 2 0 01-2-2V5"/></svg>';
-        labelText = "Signature";
         break;
       case "initials":
         iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="initials-icon"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>';
-        labelText = "Initials";
         break;
       case "text":
         iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-icon"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-        labelText = "Text";
         break;
       case "date":
         iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="date-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
-        labelText = "Date";
         break;
       default:
         iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
@@ -1512,6 +1541,7 @@ export default class EditorFieldPlacementController extends Controller {
     deleteButton.className = 'field-delete-button';
     deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="trash-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     deleteButton.dataset.action = 'click->editor-field-placement#deleteFieldFromPdf';
+    deleteButton.dataset.fieldId = fieldData.id;
     fieldElement.appendChild(deleteButton);
     
     // Add resize handles
@@ -1541,5 +1571,29 @@ export default class EditorFieldPlacementController extends Controller {
     this.saveField(fieldObj, fieldId);
     
     return fieldObj;
+  }
+
+  updateField(fieldId, fieldData) {
+    console.log(`Updating field ${fieldId} with data:`, fieldData);
+    
+    // Find the field in our local array
+    const field = this.fields.find(f => f.serverId === fieldId);
+    
+    if (!field) {
+      console.error(`Field with server ID ${fieldId} not found for update`);
+      return;
+    }
+    
+    // Update the field data
+    Object.keys(fieldData).forEach(key => {
+      if (key !== "element" && key !== "id" && key !== "serverId") {
+        field[key] = fieldData[key];
+      }
+    });
+    
+    // Use the existing updateFieldOnServer method to send to server
+    this.updateFieldOnServer(field);
+    
+    return field;
   }
 }
