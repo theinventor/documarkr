@@ -20,6 +20,122 @@ export default class extends Controller {
 
     console.log("Field signing controller connected");
     
+    // Add pulse animation and notification styles CSS
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+      }
+      
+      .pulse-animation {
+        animation: pulse 1.5s infinite;
+      }
+
+      /* Toast notification styles */
+      .notification-toast {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        max-width: 80%;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease-in-out;
+        font-size: 16px;
+        font-weight: 500;
+      }
+      
+      .notification-toast.error {
+        background-color: #FEE2E2;
+        border: 1px solid #F87171;
+        color: #B91C1C;
+      }
+      
+      .notification-toast.success {
+        background-color: #D1FAE5;
+        border: 1px solid #34D399;
+        color: #065F46;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translate(-50%, -20px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
+      }
+      
+      .notification-enter {
+        animation: fadeIn 0.3s ease-out forwards;
+      }
+      
+      @keyframes fadeOut {
+        from { opacity: 1; transform: translate(-50%, 0); }
+        to { opacity: 0; transform: translate(-50%, -20px); }
+      }
+      
+      .fade-out {
+        animation: fadeOut 0.5s ease-in forwards;
+      }
+      
+      /* Persistent error container */
+      #persistent-error-container {
+        position: fixed;
+        top: 20px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        z-index: 10000;
+        pointer-events: none;
+      }
+      
+      #persistent-error-container .error-message {
+        background-color: #FEE2E2;
+        border: 2px solid #EF4444;
+        color: #B91C1C;
+        padding: 12px 16px;
+        border-radius: 6px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        max-width: 90%;
+        pointer-events: auto;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      #persistent-error-container .error-message button {
+        background-color: transparent;
+        border: none;
+        color: #B91C1C;
+        cursor: pointer;
+        margin-left: 12px;
+        padding: 4px;
+      }
+      
+      .submission-error {
+        font-size: 18px;
+        text-align: center;
+        margin-bottom: 8px;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Create persistent error container
+    if (!document.getElementById('persistent-error-container')) {
+      const errorContainer = document.createElement('div');
+      errorContainer.id = 'persistent-error-container';
+      document.body.appendChild(errorContainer);
+    }
+    
     // Install event listeners
     this.handlePageChangeEvent = this.handlePageChangeEvent.bind(this);
     document.addEventListener('pdf-viewer:pageChanged', this.handlePageChangeEvent);
@@ -92,6 +208,13 @@ export default class extends Controller {
     } else {
       console.error("Modal target is MISSING on connect! Field interactions won't work properly.");
     }
+
+    // Debug field status on connection after a short delay
+    setTimeout(() => {
+      console.log("==== FIELD STATUS DEBUG ====");
+      this.debugFieldStatus();
+      console.log("===========================");
+    }, 2500);
   }
   
   disconnect() {
@@ -124,11 +247,41 @@ export default class extends Controller {
       // Add hover effect
       field.classList.add('hover:bg-blue-50');
       
+      // Ensure the required flag is properly set as a boolean data attribute
+      if (field.hasAttribute('data-required')) {
+        const isRequired = field.getAttribute('data-required') === 'true';
+        field.dataset.required = isRequired.toString();
+        console.log(`Field ${field.dataset.fieldId} required status: ${field.dataset.required}`);
+        
+        // Add a visual indicator for required fields
+        if (isRequired) {
+          // Add a star or other indicator for required fields
+          const requiredIndicator = document.createElement('div');
+          requiredIndicator.className = 'required-indicator';
+          requiredIndicator.textContent = '*';
+          requiredIndicator.style.position = 'absolute';
+          requiredIndicator.style.top = '0';
+          requiredIndicator.style.right = '0';
+          requiredIndicator.style.color = '#EF4444';
+          requiredIndicator.style.fontWeight = 'bold';
+          requiredIndicator.style.fontSize = '16px';
+          requiredIndicator.style.padding = '2px 5px';
+          field.appendChild(requiredIndicator);
+        }
+      }
+      
       // For date fields, pre-populate with today's date
       if (field.dataset.fieldType === 'date' && !field.dataset.completed) {
         const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
         this.updateField(field.dataset.fieldId.replace('field-', ''), todayDate);
       }
+    });
+    
+    // Additional check: log any required fields for debugging
+    const requiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+    console.log(`Found ${requiredFields.length} required fields on initialize`);
+    requiredFields.forEach(field => {
+      console.log(`Required field: ID=${field.dataset.fieldId}, Type=${field.dataset.fieldType}`);
     });
   }
   
@@ -562,9 +715,14 @@ export default class extends Controller {
   }
   
   updateField(fieldId, value) {
+    console.log(`Updating field ${fieldId} with value:`, value);
+    
     // Find the field element
     const field = this.fieldTargets.find(f => f.dataset.fieldId === `field-${fieldId}`)
-    if (!field) return
+    if (!field) {
+      console.error(`Field not found with ID: field-${fieldId}`);
+      return;
+    }
     
     // Update the server
     this.saveFieldValue(fieldId, value)
@@ -596,12 +754,15 @@ export default class extends Controller {
       field.appendChild(div);
     }
     
-    // Mark as completed
+    // Mark as completed - ensure this is set correctly
     field.dataset.completed = "true";
+    field.setAttribute('data-completed', 'true'); // Ensure attribute is set
     field.classList.remove('border-dashed');
     field.classList.add('border-solid', 'completed');
     field.style.border = '2px solid #4CAF50';
     field.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
+    
+    console.log(`Field ${fieldId} marked as completed:`, field.dataset.completed);
     
     // Check if all fields are completed
     this.updateFieldStatuses();
@@ -609,10 +770,14 @@ export default class extends Controller {
   
   async saveFieldValue(fieldId, value) {
     const dbId = fieldId.replace('field-', '')
+    console.log(`Saving field value for field ID ${dbId}...`);
     
     try {
       // Include token in the URL
-      const response = await fetch(`/sign/${this.documentIdValue}/form_fields/${dbId}/complete?token=${this.tokenValue}`, {
+      const url = `/sign/${this.documentIdValue}/form_fields/${dbId}/complete?token=${this.tokenValue}`;
+      console.log(`Sending POST request to: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -621,18 +786,93 @@ export default class extends Controller {
         body: JSON.stringify({ value })
       })
       
+      console.log(`Field save response status: ${response.status}`);
+      
       if (!response.ok) {
-        console.error('Error saving field value:', response.statusText)
-        alert('Failed to save your input. Please try again.')
-        return false
+        const errorText = await response.text();
+        console.error('Error saving field value:', response.statusText, errorText);
+        
+        // Show an error notification
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'notification-toast error notification-enter';
+        errorMessage.innerHTML = `
+          <strong class="font-bold">Error!</strong>
+          <span class="block sm:inline">Failed to save your input: ${response.statusText}</span>
+          <button class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove()">
+            <svg class="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        `;
+        document.body.appendChild(errorMessage);
+        
+        // Remove the message after 5 seconds
+        setTimeout(() => {
+          if (document.body.contains(errorMessage)) {
+            errorMessage.classList.add('fade-out');
+            setTimeout(() => errorMessage.remove(), 500);
+          }
+        }, 5000);
+        
+        return false;
       }
       
-      const data = await response.json()
-      return data.success
+      const data = await response.json();
+      console.log(`Field saved successfully:`, data);
+      
+      // Verify the field value was actually saved by making a GET request
+      try {
+        console.log(`Verifying field save for ${dbId}...`);
+        const verifyUrl = `/sign/${this.documentIdValue}/form_fields/${dbId}/status?token=${this.tokenValue}`;
+        const verifyResponse = await fetch(verifyUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (verifyResponse.ok) {
+          const verifyData = await verifyResponse.json();
+          console.log(`Field verification result:`, verifyData);
+          
+          if (!verifyData.completed) {
+            console.error(`Field ${dbId} save verification failed: Server reports field as not completed!`);
+            this.showPersistentError(`Warning: Server did not confirm field completion. There may be synchronization issues.`);
+          }
+        } else {
+          console.warn(`Could not verify field save status: ${verifyResponse.status}`);
+        }
+      } catch (verifyError) {
+        console.error(`Error verifying field save:`, verifyError);
+      }
+      
+      return data.success;
     } catch (error) {
-      console.error('Error saving field value:', error)
-      alert('Failed to save your input. Please try again.')
-      return false
+      console.error('Error saving field value:', error);
+      
+      // Show an error notification
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'notification-toast error notification-enter';
+      errorMessage.innerHTML = `
+        <strong class="font-bold">Error!</strong>
+        <span class="block sm:inline">Failed to save your input. Please try again.</span>
+        <button class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove()">
+          <svg class="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      `;
+      document.body.appendChild(errorMessage);
+      
+      // Remove the message after 5 seconds
+      setTimeout(() => {
+        if (document.body.contains(errorMessage)) {
+          errorMessage.classList.add('fade-out');
+          setTimeout(() => errorMessage.remove(), 500);
+        }
+      }, 5000);
+      
+      return false;
     }
   }
   
@@ -671,37 +911,110 @@ export default class extends Controller {
   }
   
   completeDocument() {
-    // Submit all signatures
-    fetch(`/sign/${this.documentIdValue}?token=${this.tokenValue}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-      },
-      body: JSON.stringify({})
-    })
-    .then(response => {
-      if (!response.ok) {
-        return response.json().then(data => {
-          console.error('Error completing document:', data.error);
-          alert('Error completing document: ' + (data.error || 'Unknown error'));
-          throw new Error(data.error || 'Unknown error');
-        });
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log('Document completed successfully:', data);
+    // First, check if all required fields are complete
+    const incompleteFields = this.fieldTargets.filter(field => 
+      field.dataset.required === "true" && field.dataset.completed !== "true"
+    );
+    
+    if (incompleteFields.length > 0) {
+      // Show error message in the persistent container
+      this.showPersistentError(`Please complete all required fields (${incompleteFields.length} remaining) before submitting.`);
       
-      // Check if we have a redirect URL
-      if (data.redirect_url) {
-        window.location.href = data.redirect_url;
-      } else if (this.hasCompleteRedirectUrlValue) {
-        window.location.href = this.completeRedirectUrlValue;
+      // Highlight incomplete fields
+      incompleteFields.forEach(field => {
+        field.style.border = '2px solid #EF4444';
+        field.style.backgroundColor = 'rgba(254, 226, 226, 0.7)';
+        
+        // Add a pulse animation
+        field.classList.add('pulse-animation');
+        
+        // Scroll to the first incomplete field
+        if (field === incompleteFields[0]) {
+          this.scrollToField({ currentTarget: { dataset: { fieldId: field.dataset.fieldId } } });
+        }
+      });
+      
+      return; // Don't proceed with submission
+    }
+    
+    console.log("Client-side validation passed. Submitting document...");
+    
+    // Clear any existing errors
+    document.getElementById('persistent-error-container').innerHTML = '';
+    
+    // Add a slight delay to ensure all field values are saved to the server
+    setTimeout(() => {
+      // Submit all signatures
+      fetch(`/sign/${this.documentIdValue}?token=${this.tokenValue}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+          debug_info: JSON.stringify(this.debugFieldStatus())
+        })
+      })
+      .then(response => {
+        console.log("Document submission response:", response.status, response.statusText);
+        
+        if (!response.ok) {
+          return response.json().then(data => {
+            console.error('Error completing document:', data);
+            
+            // Show error in the persistent container
+            this.showPersistentError(data.error || 'An error occurred during submission. Please try again.');
+            
+            throw new Error(data.error || 'Unknown error');
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        console.log('Document completed successfully:', data);
+        
+        // Show success message before redirecting
+        const successMessage = document.createElement('div');
+        successMessage.className = 'notification-toast success notification-enter';
+        
+        successMessage.innerHTML = `
+          <strong class="font-bold">Success!</strong>
+          <span class="block sm:inline">Document signed successfully! Redirecting...</span>
+        `;
+        
+        document.body.appendChild(successMessage);
+        
+        // Check if we have a redirect URL and redirect after a short delay
+        setTimeout(() => {
+          if (data.redirect_url) {
+            window.location.href = data.redirect_url;
+          } else if (this.hasCompleteRedirectUrlValue) {
+            window.location.href = this.completeRedirectUrlValue;
+          }
+        }, 1500); // Short delay to show the success message
+      })
+      .catch(error => {
+        console.error('Error completing document:', error);
+      });
+    }, 500); // Short delay to ensure field values are saved
+  }
+  
+  // Add a method to dismiss error messages
+  dismissError(event) {
+    const errorMessage = event.target.closest('div');
+    if (errorMessage) {
+      errorMessage.remove();
+    }
+    
+    // Reset field highlighting
+    this.fieldTargets.forEach(field => {
+      if (field.classList.contains('pulse-animation')) {
+        field.classList.remove('pulse-animation');
+        field.style.border = field.dataset.completed === "true" ? 
+          '2px solid #4CAF50' : '2px dashed #2563EB';
+        field.style.backgroundColor = field.dataset.completed === "true" ? 
+          'rgba(220, 252, 231, 0.7)' : 'rgba(239, 246, 255, 0.7)';
       }
-    })
-    .catch(error => {
-      console.error('Error completing document:', error);
     });
   }
   
@@ -966,6 +1279,12 @@ export default class extends Controller {
     
     console.log(`Field completion: ${completedFields.length}/${allRequiredFields.length} fields completed`);
     
+    // Log detailed info about each required field for debugging
+    console.log("Required fields status:");
+    allRequiredFields.forEach(field => {
+      console.log(`Field ID: ${field.dataset.fieldId}, Type: ${field.dataset.fieldType}, Completed: ${field.dataset.completed === "true"}, Required: ${field.dataset.required === "true"}`);
+    });
+    
     // Update field statuses in the sidebar
     if (this.hasFieldsListTarget) {
       const statusItems = this.fieldsListTarget.querySelectorAll('.field-status-item');
@@ -1002,6 +1321,8 @@ export default class extends Controller {
     if (allCompleted) {
       this.showCompletionMessage();
     }
+    
+    return { allCompleted, completedCount: completedFields.length, requiredCount: allRequiredFields.length };
   }
   
   // Update progress bar in the sidebar
@@ -1050,5 +1371,104 @@ export default class extends Controller {
       // Scroll the field into view
       field.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }
+
+  // Add a debug method to check field status
+  debugFieldStatus() {
+    // Log field targets info
+    console.log(`Total field targets: ${this.fieldTargets.length}`);
+    
+    // Check how many fields are marked as required
+    const requiredFields = this.fieldTargets.filter(field => field.dataset.required === "true");
+    console.log(`Required fields: ${requiredFields.length}`);
+    
+    // Log details of each field
+    this.fieldTargets.forEach((field, index) => {
+      console.log(`Field ${index + 1}:`);
+      console.log(`  ID: ${field.dataset.fieldId}`);
+      console.log(`  Type: ${field.dataset.fieldType}`);
+      console.log(`  Required: ${field.dataset.required}`);
+      console.log(`  Completed: ${field.dataset.completed}`);
+      console.log(`  Page: ${field.dataset.page}`);
+      
+      // Check if field has any content
+      const hasContent = field.querySelector('img') !== null || 
+                         field.querySelector('div:not(.text-input-container)') !== null;
+      console.log(`  Has Content: ${hasContent}`);
+      
+      // Check field styles
+      console.log(`  Style: border=${field.style.border}, bg=${field.style.backgroundColor}`);
+    });
+    
+    // Return a status object for potential display
+    return {
+      totalFields: this.fieldTargets.length,
+      requiredFields: requiredFields.length,
+      completedRequired: requiredFields.filter(f => f.dataset.completed === "true").length,
+      fieldDetails: this.fieldTargets.map(f => ({
+        id: f.dataset.fieldId,
+        type: f.dataset.fieldType,
+        required: f.dataset.required === "true",
+        completed: f.dataset.completed === "true"
+      }))
+    };
+  }
+
+  // Add a new method to show errors in the persistent container
+  showPersistentError(message) {
+    const container = document.getElementById('persistent-error-container');
+    if (!container) return;
+    
+    // Clear any existing errors
+    container.innerHTML = '';
+    
+    // Create error message element
+    const errorElement = document.createElement('div');
+    errorElement.className = 'error-message';
+    
+    // Add warning icon
+    const warningIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    warningIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    warningIcon.setAttribute('fill', 'none');
+    warningIcon.setAttribute('viewBox', '0 0 24 24');
+    warningIcon.setAttribute('stroke', 'currentColor');
+    warningIcon.setAttribute('width', '24');
+    warningIcon.setAttribute('height', '24');
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('d', 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z');
+    
+    warningIcon.appendChild(path);
+    
+    // Create message element
+    const messageElement = document.createElement('div');
+    messageElement.className = 'submission-error';
+    messageElement.textContent = message;
+    
+    // Create close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    `;
+    closeButton.addEventListener('click', () => {
+      container.innerHTML = '';
+    });
+    
+    // Assemble error message
+    errorElement.appendChild(warningIcon);
+    errorElement.appendChild(messageElement);
+    errorElement.appendChild(closeButton);
+    
+    // Add to container
+    container.appendChild(errorElement);
+    
+    // Log the error for debugging
+    console.error(`Showing persistent error: ${message}`);
   }
 } 

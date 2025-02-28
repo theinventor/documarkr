@@ -73,9 +73,14 @@ class DocumentSigner < ApplicationRecord
   end
 
   def completed_all_required_fields?
-    required_fields = form_fields.required
-    return false if required_fields.empty?
-    required_fields.all?(&:complete?)
+    # Get all fields for this signer, as all fields should be considered required
+    all_fields = form_fields
+
+    # If there are no fields at all, return true (nothing to complete)
+    return true if all_fields.empty?
+
+    # Check if all fields are completed, regardless of required flag
+    all_fields.all?(&:complete?)
   end
 
   def mark_as_completed!
