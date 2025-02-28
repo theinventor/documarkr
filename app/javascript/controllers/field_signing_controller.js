@@ -911,92 +911,13 @@ export default class extends Controller {
   }
   
   completeDocument() {
-    // First, check if all required fields are complete
-    const incompleteFields = this.fieldTargets.filter(field => 
-      field.dataset.required === "true" && field.dataset.completed !== "true"
-    );
-    
-    if (incompleteFields.length > 0) {
-      // Show error message in the persistent container
-      this.showPersistentError(`Please complete all required fields (${incompleteFields.length} remaining) before submitting.`);
-      
-      // Highlight incomplete fields
-      incompleteFields.forEach(field => {
-        field.style.border = '2px solid #EF4444';
-        field.style.backgroundColor = 'rgba(254, 226, 226, 0.7)';
-        
-        // Add a pulse animation
-        field.classList.add('pulse-animation');
-        
-        // Scroll to the first incomplete field
-        if (field === incompleteFields[0]) {
-          this.scrollToField({ currentTarget: { dataset: { fieldId: field.dataset.fieldId } } });
-        }
-      });
-      
-      return; // Don't proceed with submission
+    // Find the form and submit it
+    const form = document.getElementById('sign-document-form');
+    if (form) {
+      form.requestSubmit();
+    } else {
+      console.error("Sign document form not found!");
     }
-    
-    console.log("Client-side validation passed. Submitting document...");
-    
-    // Clear any existing errors
-    document.getElementById('persistent-error-container').innerHTML = '';
-    
-    // Add a slight delay to ensure all field values are saved to the server
-    setTimeout(() => {
-      // Submit all signatures
-      fetch(`/sign/${this.documentIdValue}?token=${this.tokenValue}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
-        },
-        body: JSON.stringify({
-          debug_info: JSON.stringify(this.debugFieldStatus())
-        })
-      })
-      .then(response => {
-        console.log("Document submission response:", response.status, response.statusText);
-        
-        if (!response.ok) {
-          return response.json().then(data => {
-            console.error('Error completing document:', data);
-            
-            // Show error in the persistent container
-            this.showPersistentError(data.error || 'An error occurred during submission. Please try again.');
-            
-            throw new Error(data.error || 'Unknown error');
-          });
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log('Document completed successfully:', data);
-        
-        // Show success message before redirecting
-        const successMessage = document.createElement('div');
-        successMessage.className = 'notification-toast success notification-enter';
-        
-        successMessage.innerHTML = `
-          <strong class="font-bold">Success!</strong>
-          <span class="block sm:inline">Document signed successfully! Redirecting...</span>
-        `;
-        
-        document.body.appendChild(successMessage);
-        
-        // Check if we have a redirect URL and redirect after a short delay
-        setTimeout(() => {
-          if (data.redirect_url) {
-            window.location.href = data.redirect_url;
-          } else if (this.hasCompleteRedirectUrlValue) {
-            window.location.href = this.completeRedirectUrlValue;
-          }
-        }, 1500); // Short delay to show the success message
-      })
-      .catch(error => {
-        console.error('Error completing document:', error);
-      });
-    }, 500); // Short delay to ensure field values are saved
   }
   
   // Add a method to dismiss error messages
@@ -1054,25 +975,90 @@ export default class extends Controller {
     const existingButton = document.getElementById('document-submit-button');
     if (existingButton) return;
     
-    // Create a submit button in case the template doesn't have one
+    // Create a submit button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'p-4 border-t border-gray-200';
+    
+    // Create a form that will submit via Turbo
+    const form = document.createElement('form');
+    form.id = 'sign-document-form';
+    form.method = 'post';
+    form.action = `/sign/${this.documentIdValue}?token=${this.tokenValue}`;
+    
+    // Add Turbo attributes for proper handling
+    form.setAttribute('data-turbo', 'true');
+    form.setAttribute('data-controller', 'turbo-form');
+    
+    // Add CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'authenticity_token';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+    
+    // Add debug info as hidden input
+    const debugInfoInput = document.createElement('input');
+    debugInfoInput.type = 'hidden';
+    debugInfoInput.name = 'debug_info';
+    debugInfoInput.value = JSON.stringify(this.debugFieldStatus());
+    form.appendChild(debugInfoInput);
+    
+    // Create submit button
     const submitButton = document.createElement('button');
     submitButton.id = 'document-submit-button';
     submitButton.textContent = 'Sign Document';
     submitButton.className = 'w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow opacity-50 cursor-not-allowed';
     submitButton.disabled = true;
-    submitButton.setAttribute('form', 'sign-form');
     submitButton.setAttribute('type', 'submit');
+    submitButton.setAttribute('data-action', 'click->field-signing#validateBeforeSubmit');
+    
+    // Add button to form and form to container
+    form.appendChild(submitButton);
+    buttonContainer.appendChild(form);
     
     // Find a place to add the button
     const sidebar = document.querySelector('[data-field-signing-target="fieldsList"]');
     if (sidebar && sidebar.parentElement) {
-      const buttonContainer = document.createElement('div');
-      buttonContainer.className = 'p-4 border-t border-gray-200';
-      buttonContainer.appendChild(submitButton);
       sidebar.parentElement.appendChild(buttonContainer);
     }
   }
-
+  
+  // Validate fields before submission
+  validateBeforeSubmit(event) {
+    // First, check if all required fields are complete
+    const incompleteFields = this.fieldTargets.filter(field => 
+      field.dataset.required === "true" && field.dataset.completed !== "true"
+    );
+    
+    if (incompleteFields.length > 0) {
+      // Prevent the form submission
+      event.preventDefault();
+      
+      // Show error message in the persistent container
+      this.showPersistentError(`Please complete all required fields (${incompleteFields.length} remaining) before submitting.`);
+      
+      // Highlight incomplete fields
+      incompleteFields.forEach(field => {
+        field.style.border = '2px solid #EF4444';
+        field.style.backgroundColor = 'rgba(254, 226, 226, 0.7)';
+        
+        // Add a pulse animation
+        field.classList.add('pulse-animation');
+        
+        // Scroll to the first incomplete field
+        if (field === incompleteFields[0]) {
+          this.scrollToField({ currentTarget: { dataset: { fieldId: field.dataset.fieldId } } });
+        }
+      });
+      
+      return; // Don't proceed with submission
+    }
+    
+    console.log("Client-side validation passed. Submitting document via Turbo...");
+    // Form will submit normally via Turbo
+  }
+  
   // New method to ensure all fields have click handlers
   setupFieldClickHandlers() {
     console.log("Setting up field click handlers");
