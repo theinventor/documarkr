@@ -2,53 +2,44 @@
 
 Documarkr is an open-source document signing platform similar to DocuSign, but with a streamlined feature set focused on the core electronic signature workflow. Built with Ruby on Rails 8 and Hotwire, it provides a modern, responsive experience for document signing needs.
 
-![Documarkr Logo](app/assets/images/logo.png)
 
 ## Features
 
 - **Document Management**: Upload, organize, and track PDF documents
 - **Field Placement**: Visually place signature fields, text boxes, date fields, and initials on documents
-- **Signing Workflow**: Support for sequential or parallel signing by multiple users
-- **Signature Options**: Draw, type, or upload signature images
+- **Signature Options**: Draw signature images
 - **Security & Audit**: Comprehensive audit trails with metadata tracking (IP, email, timestamp, user agent)
-- **Templates**: Save frequently used documents as reusable templates
-- **Mobile Friendly**: Responsive design works on desktop and mobile devices
 
 ## Tech Stack
 
 ### Backend
 - Ruby on Rails 8
-- PostgreSQL database
+- SQLite
 - Active Storage for file management
-- Sidekiq for background processing
-- HexaPDF for PDF manipulation
+- Solid Queue for background processing
+- PDF-Lib and PDFjs for PDF work
 
 ### Frontend
 - Hotwire (Turbo + Stimulus)
 - PDF.js for PDF rendering
-- Fabric.js for signature drawing capabilities
 
 ## Getting Started
 
 ### Prerequisites
 - Ruby 3.3.0+
 - Rails 8.0.0+
-- PostgreSQL 14+
-- Node.js 18+ and Yarn
-- Redis (for Sidekiq)
 
 ### Installation
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/documarkr.git
+git clone https://github.com/theinventor/documarkr.git
 cd documarkr
 ```
 
 2. Install dependencies
 ```bash
 bundle install
-yarn install
 ```
 
 3. Setup database
@@ -60,27 +51,17 @@ rails db:seed  # Creates sample users and templates
 
 4. Start the servers
 ```bash
-# In separate terminals:
-rails server
-redis-server
-bundle exec sidekiq
+bin/dev
 ```
 
 5. Visit `http://localhost:3000` in your browser
 
 ### Configuration
 
-Configuration is managed through environment variables. Copy the example file and adjust as needed:
-
-```bash
-cp .env.example .env
-```
-
 Key configurations:
 - `DATABASE_URL`: PostgreSQL connection string
 - `REDIS_URL`: Redis connection for Sidekiq
 - `SMTP_*`: Email delivery settings
-- `AWS_*`: S3 storage settings (optional)
 
 ## User Roles
 
@@ -90,14 +71,7 @@ Key configurations:
 
 ## Development
 
-### Testing
-```bash
-# Run all tests
-rails test
 
-# Run system tests
-rails test:system
-```
 
 ### Code Quality
 ```bash
