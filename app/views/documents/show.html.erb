@@ -172,7 +172,7 @@
     <h2 class="text-lg font-medium text-gray-900 mb-4">Actions</h2>
     <div class="flex flex-wrap gap-2">
       <% if @document.draft? && @document.document_signers.any? %>
-        <%= link_to "Send to Signers", send_to_signers_document_path(@document), method: :post, data: { turbo_method: :post, turbo_confirm: "Are you sure you want to send this document to #{@document.document_signers.order(:sign_order).first.name} for signing?" } do %>
+        <%= link_to send_to_signers_document_path(@document), data: { turbo_method: :post, turbo_confirm: "Are you sure you want to send this document to #{@document.document_signers.order(:sign_order).first.name} for signing?" }, class: "inline-flex items-center justify-center font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 px-3 py-1.5 text-sm leading-4 border border-transparent text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500" do %>
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" />
           </svg>
