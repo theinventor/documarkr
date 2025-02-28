@@ -2,6 +2,9 @@
 
 Documarkr is an open-source document signing platform similar to DocuSign, but with a streamlined feature set focused on the core electronic signature workflow. Built with Ruby on Rails 8 and Hotwire, it provides a modern, responsive experience for document signing needs.
 
+This was built 100% with AI, no human wrote a single line of code.
+
+STATUS: This app is mostly working for the happy path. The finalized PDF isn't currently looking super beautiful, but a few more hours with Claude and it can be. Might take a moment to get production email working, I only had it going in development so far. 
 
 ## Features
 
