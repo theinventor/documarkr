@@ -1,3 +1,4 @@
+# May 16, 2024: Fixed redirects in create and destroy actions to go to edit_document_path instead of document_path
 class DocumentSignersController < ApplicationController
   before_action :authenticate_user!
   before_action :set_document
@@ -52,7 +53,7 @@ class DocumentSignersController < ApplicationController
         signer_name: @document_signer.name
       })
 
-      redirect_to document_path(@document), notice: "Signer successfully added."
+      redirect_to edit_document_path(@document), notice: "Signer successfully added."
     else
       render :new, status: :unprocessable_entity
     end
@@ -70,7 +71,7 @@ class DocumentSignersController < ApplicationController
     })
 
     @document_signer.destroy
-    redirect_to document_path(@document), notice: "Signer successfully removed."
+    redirect_to edit_document_path(@document), notice: "Signer successfully removed."
   end
 
   private

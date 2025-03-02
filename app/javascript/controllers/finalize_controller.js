@@ -1454,106 +1454,462 @@ export default class extends Controller {
       const width = parseFloat(field.width || field.dataset?.width || 0);
       const height = parseFloat(field.height || field.dataset?.height || 0);
       
-      if (fieldType === 'signature' || fieldType === 'initials') {
-        // Get image source (handle both DOM elements and data objects)
-        let imageData = null;
-        
-        // Try to get image from DOM element
-        const img = field.querySelector ? field.querySelector('img') : null;
-        if (img && img.src) {
-          imageData = img.src;
-        } 
-        // If no DOM image, try to get from value property
-        else if (field.value && typeof field.value === 'string' && field.value.startsWith('data:image')) {
-          imageData = field.value;
+      // Call appropriate function based on field type
+      switch (fieldType) {
+        case 'signature':
+          await this.addSignatureFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb);
+          break;
+        case 'initials':
+          await this.addInitialsFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb);
+          break;
+        case 'text':
+          await this.addTextFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb);
+          break;
+        case 'date':
+          await this.addDateFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb);
+          break;
+        default:
+          console.warn(`DEBUG: Unsupported field type: ${fieldType}`);
+      }
+    } catch (error) {
+      console.error("DEBUG: Error in addFieldToPdf:", error);
+      // Don't throw the error, just log it to allow processing of other fields
+    }
+  }
+  
+  async addSignatureFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb) {
+    try {
+      // Get image source (handle both DOM elements and data objects)
+      let imageData = null;
+      
+      // Try to get image from DOM element
+      const img = field.querySelector ? field.querySelector('img') : null;
+      if (img && img.src) {
+        imageData = img.src;
+      } 
+      // If no DOM image, try to get from value property
+      else if (field.value && typeof field.value === 'string' && field.value.startsWith('data:image')) {
+        imageData = field.value;
+      }
+      
+      if (!imageData) {
+        console.warn(`DEBUG: No image source found for signature field`);
+        return;
+      }
+      
+      console.log(`DEBUG: Image data found for signature field (${imageData.substring(0, 30)}...)`);
+      
+      try {
+        // Determine image format from data URL
+        let imageFormat = 'png'; // Default format
+        if (imageData.startsWith('data:image/png')) {
+          imageFormat = 'png';
+        } else if (imageData.startsWith('data:image/jpeg') || imageData.startsWith('data:image/jpg')) {
+          imageFormat = 'jpeg';
         }
         
-        if (!imageData) {
-          console.warn(`DEBUG: No image source found for ${fieldType} field`);
-          return;
+        // Embed the image into the PDF
+        const embeddedImage = imageFormat === 'png' 
+          ? await pdfDoc.embedPng(imageData)
+          : await pdfDoc.embedJpg(imageData);
+        
+        // Calculate scaling for the image - INCREASED SCALING FACTORS
+        // For signatures: 2.5x (was 1.5x)
+        const scaleFactor = 2.5;
+        
+        // Get image dimensions
+        const imgWidth = embeddedImage.width;
+        const imgHeight = embeddedImage.height;
+        
+        // Calculate aspect ratio and dimensions to maintain it
+        const aspectRatio = imgWidth / imgHeight;
+        let drawWidth, drawHeight;
+        
+        if (aspectRatio > 1) {
+          // Wider than tall
+          drawWidth = width * scaleFactor;
+          drawHeight = drawWidth / aspectRatio;
+        } else {
+          // Taller than wide or square
+          drawHeight = height * scaleFactor;
+          drawWidth = drawHeight * aspectRatio;
         }
         
-        console.log(`DEBUG: Image data found for ${fieldType} field (${imageData.substring(0, 30)}...)`);
+        // Ensure minimum size for visibility
+        const minSize = 50; // Increased minimum sizes
+        drawWidth = Math.max(drawWidth, minSize);
+        drawHeight = Math.max(drawHeight, minSize / aspectRatio);
         
-        try {
-          // Determine image format from data URL
-          let imageFormat = 'png'; // Default format
-          if (imageData.startsWith('data:image/png')) {
-            imageFormat = 'png';
-          } else if (imageData.startsWith('data:image/jpeg') || imageData.startsWith('data:image/jpg')) {
-            imageFormat = 'jpeg';
-          }
-          
-          // Embed the image into the PDF
-          const embeddedImage = imageFormat === 'png' 
-            ? await pdfDoc.embedPng(imageData)
-            : await pdfDoc.embedJpg(imageData);
-          
-          // Calculate scaling for the image - INCREASED SCALING FACTORS
-          // For signatures: 2.5x (was 1.5x)
-          // For initials: 2.0x (was 1.2x)
-          const scaleFactor = fieldType === 'signature' ? 2.5 : 2.0;
-          
-          // Get image dimensions
-          const imgWidth = embeddedImage.width;
-          const imgHeight = embeddedImage.height;
-          
-          // Calculate aspect ratio and dimensions to maintain it
-          const aspectRatio = imgWidth / imgHeight;
-          let drawWidth, drawHeight;
-          
-          if (aspectRatio > 1) {
-            // Wider than tall
-            drawWidth = width * scaleFactor;
-            drawHeight = drawWidth / aspectRatio;
-          } else {
-            // Taller than wide or square
-            drawHeight = height * scaleFactor;
-            drawWidth = drawHeight * aspectRatio;
-          }
-          
-          // Ensure minimum size for visibility
-          const minSize = fieldType === 'signature' ? 50 : 30; // Increased minimum sizes
-          drawWidth = Math.max(drawWidth, minSize);
-          drawHeight = Math.max(drawHeight, minSize / aspectRatio);
-          
-          // Center the image within the field
-          const xOffset = (width - drawWidth) / 2;
-          const yOffset = (height - drawHeight) / 2;
-          
-          console.log(`DEBUG: Drawing ${fieldType} image: size=${drawWidth}x${drawHeight}, position=(${x + xOffset}, ${y - yOffset})`);
-          
-          // Draw the image
-          page.drawImage(embeddedImage, {
-            x: x + xOffset,
-            y: y - drawHeight - yOffset, // Adjust y position (PDF coordinates start at bottom)
-            width: drawWidth,
-            height: drawHeight
-          });
-          
-          console.log(`DEBUG: Successfully added ${fieldType} image to PDF`);
-        } catch (imgError) {
-          console.error(`DEBUG: Error embedding ${fieldType} image:`, imgError);
-          
-          // Fallback to text if image embedding fails
-          const helveticaFont = await pdfDoc.embedFont('Helvetica');
-          page.drawText(`[${fieldType}]`, {
-            x: x + 5,
-            y: y - 15,
-            size: 12,
-            font: helveticaFont
-          });
-          
-          // Define drawWidth and drawHeight for later C-box code
-          const drawWidth = width;
-          const drawHeight = height;
-          const xOffset = 0;
-          const yOffset = 0;
-          
-          console.log(`DEBUG: Used text fallback for ${fieldType} field`);
+        // Center the image within the field
+        const xOffset = (width - drawWidth) / 2;
+        const yOffset = (height - drawHeight) / 2;
+        
+        console.log(`DEBUG: Drawing signature image: size=${drawWidth}x${drawHeight}, position=(${x + xOffset}, ${y - yOffset})`);
+        
+        // Draw the image
+        page.drawImage(embeddedImage, {
+          x: x + xOffset,
+          y: y - drawHeight - yOffset, // Adjust y position (PDF coordinates start at bottom)
+          width: drawWidth,
+          height: drawHeight
+        });
+        
+        console.log(`DEBUG: Successfully added signature image to PDF`);
+      } catch (imgError) {
+        console.error(`DEBUG: Error embedding signature image:`, imgError);
+        
+        // Fallback to text if image embedding fails
+        const helveticaFont = await pdfDoc.embedFont('Helvetica');
+        page.drawText(`[signature]`, {
+          x: x + 5,
+          y: y - 15,
+          size: 12,
+          font: helveticaFont
+        });
+        
+        // Define drawWidth and drawHeight for later C-box code
+        const drawWidth = width;
+        const drawHeight = height;
+        const xOffset = 0;
+        const yOffset = 0;
+        
+        console.log(`DEBUG: Used text fallback for signature field`);
+      }
+      
+      // Add a C-shaped outline for signature fields
+      try {
+        // Get a name for the field - default to "Signer" if not available
+        let signerName = "Signer";
+        
+        // Try to get name from field data attributes or parent elements if available
+        if (field.dataset && field.dataset.signerName) {
+          signerName = field.dataset.signerName;
+        } else if (field.closest && field.closest('[data-signer-name]')) {
+          signerName = field.closest('[data-signer-name]').dataset.signerName;
         }
         
-        // Add a C-shaped outline for signature and initials fields
+        // We need valid dimensions for drawing the box - with proper fallbacks
+        const drawWidthValue = typeof drawWidth !== 'undefined' ? drawWidth : width;
+        const drawHeightValue = typeof drawHeight !== 'undefined' ? drawHeight : height;
+        const xOffsetValue = typeof xOffset !== 'undefined' ? xOffset : 0;
+        const yOffsetValue = typeof yOffset !== 'undefined' ? yOffset : 0;
+        
+        // Adjusted C-Box positioning
+        const outlineX = x - 20; // Move left side 10px further left
+        const outlineY = y - height - 20; // Lower bottom line by 20px
+        const outlineHeight = height + 30; // Increase height to keep top line unchanged
+        const outlineWidth = 30; // Keep existing width
+        
+        console.log(`DEBUG: Drawing C-shaped outline for signature field with dimensions: w=${drawWidthValue}, h=${drawHeightValue}`);
+        
+        // Left vertical line
+        page.drawLine({
+          start: { x: outlineX, y: outlineY },
+          end: { x: outlineX, y: outlineY + outlineHeight },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Top horizontal line (unchanged)
+        page.drawLine({
+          start: { x: outlineX, y: outlineY + outlineHeight },
+          end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Bottom horizontal line (adjusted)
+        page.drawLine({
+          start: { x: outlineX, y: outlineY },
+          end: { x: outlineX + outlineWidth, y: outlineY },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Add text based on field type
+        let labelText = `Signed by: ${signerName}`;
+        
+        const font = await pdfDoc.embedFont('Helvetica');
+        page.drawText(labelText, {
+          x: outlineX + 5,
+          y: outlineY - 15, // Below the field
+          size: 9, // Small font size
+          font: font,
+          color: rgb(0, 0, 0),
+          opacity: 1.0
+        });
+        
+        console.log(`DEBUG: Successfully added signature border and text`);
+      } catch (borderError) {
+        console.error(`DEBUG: Error drawing signature border:`, borderError);
+      }
+    } catch (error) {
+      console.error("DEBUG: Error in addSignatureFieldToPdf:", error);
+    }
+  }
+  
+  async addInitialsFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb) {
+    try {
+      // Get image source (handle both DOM elements and data objects)
+      let imageData = null;
+      
+      // Try to get image from DOM element
+      const img = field.querySelector ? field.querySelector('img') : null;
+      if (img && img.src) {
+        imageData = img.src;
+      } 
+      // If no DOM image, try to get from value property
+      else if (field.value && typeof field.value === 'string' && field.value.startsWith('data:image')) {
+        imageData = field.value;
+      }
+      
+      if (!imageData) {
+        console.warn(`DEBUG: No image source found for initials field`);
+        return;
+      }
+      
+      console.log(`DEBUG: Image data found for initials field (${imageData.substring(0, 30)}...)`);
+      
+      try {
+        // Determine image format from data URL
+        let imageFormat = 'png'; // Default format
+        if (imageData.startsWith('data:image/png')) {
+          imageFormat = 'png';
+        } else if (imageData.startsWith('data:image/jpeg') || imageData.startsWith('data:image/jpg')) {
+          imageFormat = 'jpeg';
+        }
+        
+        // Embed the image into the PDF
+        const embeddedImage = imageFormat === 'png' 
+          ? await pdfDoc.embedPng(imageData)
+          : await pdfDoc.embedJpg(imageData);
+        
+        // Calculate scaling for the image - INCREASED SCALING FACTORS
+        // For initials: 2.0x (was 1.2x)
+        const scaleFactor = 2.0;
+        
+        // Get image dimensions
+        const imgWidth = embeddedImage.width;
+        const imgHeight = embeddedImage.height;
+        
+        // Calculate aspect ratio and dimensions to maintain it
+        const aspectRatio = imgWidth / imgHeight;
+        let drawWidth, drawHeight;
+        
+        if (aspectRatio > 1) {
+          // Wider than tall
+          drawWidth = width * scaleFactor;
+          drawHeight = drawWidth / aspectRatio;
+        } else {
+          // Taller than wide or square
+          drawHeight = height * scaleFactor;
+          drawWidth = drawHeight * aspectRatio;
+        }
+        
+        // Ensure minimum size for visibility
+        const minSize = 30; // Increased minimum sizes
+        drawWidth = Math.max(drawWidth, minSize);
+        drawHeight = Math.max(drawHeight, minSize / aspectRatio);
+        
+        // Center the image within the field
+        const xOffset = (width - drawWidth) / 2;
+        const yOffset = (height - drawHeight) / 2;
+        
+        console.log(`DEBUG: Drawing initials image: size=${drawWidth}x${drawHeight}, position=(${x + xOffset}, ${y - yOffset})`);
+        
+        // Draw the image
+        page.drawImage(embeddedImage, {
+          x: x + xOffset,
+          y: y - drawHeight - yOffset, // Adjust y position (PDF coordinates start at bottom)
+          width: drawWidth,
+          height: drawHeight
+        });
+        
+        console.log(`DEBUG: Successfully added initials image to PDF`);
+      } catch (imgError) {
+        console.error(`DEBUG: Error embedding initials image:`, imgError);
+        
+        // Fallback to text if image embedding fails
+        const helveticaFont = await pdfDoc.embedFont('Helvetica');
+        page.drawText(`[initials]`, {
+          x: x + 5,
+          y: y - 15,
+          size: 12,
+          font: helveticaFont
+        });
+        
+        // Define drawWidth and drawHeight for later C-box code
+        const drawWidth = width;
+        const drawHeight = height;
+        const xOffset = 0;
+        const yOffset = 0;
+        
+        console.log(`DEBUG: Used text fallback for initials field`);
+      }
+      
+      // Add a C-shaped outline for initials fields
+      try {
+        // Get a name for the field - default to "Signer" if not available
+        let signerName = "Signer";
+        
+        // Try to get name from field data attributes or parent elements if available
+        if (field.dataset && field.dataset.signerName) {
+          signerName = field.dataset.signerName;
+        } else if (field.closest && field.closest('[data-signer-name]')) {
+          signerName = field.closest('[data-signer-name]').dataset.signerName;
+        }
+        
+        // We need valid dimensions for drawing the box - with proper fallbacks
+        const drawWidthValue = typeof drawWidth !== 'undefined' ? drawWidth : width;
+        const drawHeightValue = typeof drawHeight !== 'undefined' ? drawHeight : height;
+        const xOffsetValue = typeof xOffset !== 'undefined' ? xOffset : 0;
+        const yOffsetValue = typeof yOffset !== 'undefined' ? yOffset : 0;
+        
+        // Adjusted C-Box positioning for initials
+        const outlineX = x + xOffsetValue - 10; // Keep existing left position
+        const outlineY = y - drawHeightValue - yOffsetValue - 20; // Lower bottom line by 20px
+        const outlineHeight = drawHeightValue + 30; // Increase height to keep top line unchanged
+        const outlineWidth = 30; // Keep existing width
+        
+        console.log(`DEBUG: Drawing C-shaped outline for initials field with dimensions: w=${drawWidthValue}, h=${drawHeightValue}`);
+        
+        // Left vertical line
+        page.drawLine({
+          start: { x: outlineX, y: outlineY },
+          end: { x: outlineX, y: outlineY + outlineHeight },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Top horizontal line (unchanged)
+        page.drawLine({
+          start: { x: outlineX, y: outlineY + outlineHeight },
+          end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Bottom horizontal line (adjusted)
+        page.drawLine({
+          start: { x: outlineX, y: outlineY },
+          end: { x: outlineX + outlineWidth, y: outlineY },
+          thickness: 2,
+          color: rgb(0, 0, 0),
+          opacity: 0.9
+        });
+        
+        // Add text based on field type
+        let labelText = `Initialed by: ${signerName}`;
+        
+        const font = await pdfDoc.embedFont('Helvetica');
+        page.drawText(labelText, {
+          x: outlineX + 5,
+          y: outlineY - 15, // Below the field
+          size: 9, // Small font size
+          font: font,
+          color: rgb(0, 0, 0),
+          opacity: 1.0
+        });
+        
+        console.log(`DEBUG: Successfully added initials border and text`);
+      } catch (borderError) {
+        console.error(`DEBUG: Error drawing initials border:`, borderError);
+      }
+    } catch (error) {
+      console.error("DEBUG: Error in addInitialsFieldToPdf:", error);
+    }
+  }
+  
+  async addTextFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb) {
+    try {
+      // Get text content (handle both DOM elements and data objects)
+      let textContent = '';
+      
+      // Try to get text from DOM element
+      const textElement = field.querySelector ? field.querySelector('div') : null;
+      if (textElement) {
+        textContent = textElement.textContent || '';
+        console.log(`DEBUG: Found text content in div: "${textContent}"`);
+      } 
+      // If no DOM element found, try to get from value property
+      else if (field.value && typeof field.value === 'string') {
+        textContent = field.value;
+        console.log(`DEBUG: Using value property for text: "${textContent}"`);
+      }
+      // Try getting innerHTML if no div or value
+      else if (field.innerHTML) {
+        // Create a temporary element to strip HTML tags
+        const temp = document.createElement('div');
+        temp.innerHTML = field.innerHTML;
+        textContent = temp.textContent || '';
+        console.log(`DEBUG: Extracted text from innerHTML: "${textContent}"`);
+      }
+      // Try the dataset value as a last resort
+      else if (field.dataset && field.dataset.value) {
+        textContent = field.dataset.value;
+        console.log(`DEBUG: Using dataset value: "${textContent}"`);
+      }
+      
+      console.log(`DEBUG: Raw text content for text field: "${textContent}"`);
+      
+      // If still no text content, use default values
+      if (!textContent || textContent.trim() === '') {
+        textContent = 'Text Content';
+        console.log(`DEBUG: Using default text content: "${textContent}"`);
+      }
+      
+      // Clean the text content to avoid PDF encoding issues
+      textContent = textContent.trim()
+        .replace(/[\r\n\t\f\v]/g, ' ')  // Replace newlines and tabs with spaces
+        .replace(/\s+/g, ' ')          // Replace multiple spaces with single space
+        .replace(/[^\x20-\x7E]/g, ''); // Remove non-printable ASCII characters
+      
+      console.log(`DEBUG: Cleaned text content for text field: "${textContent}"`);
+      
+      // Skip if content is empty, placeholder, or common placeholder values
+      const placeholders = ['[text]', '[date]', 'undefined', 'type here', 'mm/dd/yyyy'];
+      const isPlaceholder = placeholders.some(p => textContent.toLowerCase().includes(p.toLowerCase()));
+      
+      if (isPlaceholder) {
+        // Replace placeholders with useful content instead of skipping
+        textContent = 'Sample Text';
+        console.log(`DEBUG: Replaced placeholder with: "${textContent}"`);
+      }
+      
+      try {
+        // Embed a standard font
+        const font = await pdfDoc.embedFont('Helvetica');
+        
+        // Use a fixed font size rather than scaling to fit the field
+        const fontSize = 12; // Fixed large font size
+        
+        // Calculate text width but don't center it - just add a fixed margin
+        const textWidth = font.widthOfTextAtSize(textContent, fontSize);
+        const xPosition = x + 5; // Fixed small left margin
+        
+        // Position from bottom with a fixed offset
+        const yPosition = y - (height / 2) + (fontSize / 3);
+        
+        console.log(`DEBUG: Drawing text with fixed font size ${fontSize} at (${xPosition}, ${yPosition})`);
+        
+        // Draw the text content without trying to fit it in the box
+        page.drawText(textContent, {
+          x: xPosition,
+          y: yPosition,
+          size: fontSize,
+          font: font,
+          color: rgb(0, 0, 0),
+          lineHeight: fontSize * 1.2
+        });
+        
+        console.log(`DEBUG: Successfully added text to PDF`);
+        
+        // Add a C-shaped outline and "Entered by" text for text fields
         try {
           // Get a name for the field - default to "Signer" if not available
           let signerName = "Signer";
@@ -1565,19 +1921,13 @@ export default class extends Controller {
             signerName = field.closest('[data-signer-name]').dataset.signerName;
           }
           
-          // We need valid dimensions for drawing the box - with proper fallbacks
-          const drawWidthValue = typeof drawWidth !== 'undefined' ? drawWidth : width;
-          const drawHeightValue = typeof drawHeight !== 'undefined' ? drawHeight : height;
-          const xOffsetValue = typeof xOffset !== 'undefined' ? xOffset : 0;
-          const yOffsetValue = typeof yOffset !== 'undefined' ? yOffset : 0;
+          // Adjusted C-Box positioning for text fields
+          const outlineX = x - 10; // Keep existing left position
+          const outlineY = y - height; // Keep existing bottom position
+          const outlineHeight = height + 15; // Increase height to move top line up by 10px
+          const outlineWidth = 30; // Keep existing width
           
-          // Calculate position for C-shaped outline
-          const outlineX = x + xOffsetValue - 10; // Slightly to the left of the field
-          const outlineY = y - drawHeightValue - yOffsetValue; // Bottom of field
-          const outlineHeight = drawHeightValue + 10; // Slightly taller than the field
-          const outlineWidth = 30; // Width of the C shape
-          
-          console.log(`DEBUG: Drawing C-shaped outline for ${fieldType} field with dimensions: w=${drawWidthValue}, h=${drawHeightValue}`);
+          console.log(`DEBUG: Drawing C-shaped outline for text field`);
           
           // Left vertical line
           page.drawLine({
@@ -1588,7 +1938,7 @@ export default class extends Controller {
             opacity: 0.9
           });
           
-          // Top horizontal line (partial)
+          // Top horizontal line (adjusted)
           page.drawLine({
             start: { x: outlineX, y: outlineY + outlineHeight },
             end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
@@ -1597,7 +1947,7 @@ export default class extends Controller {
             opacity: 0.9
           });
           
-          // Bottom horizontal line (partial)
+          // Bottom horizontal line (unchanged)
           page.drawLine({
             start: { x: outlineX, y: outlineY },
             end: { x: outlineX + outlineWidth, y: outlineY },
@@ -1606,15 +1956,10 @@ export default class extends Controller {
             opacity: 0.9
           });
           
-          // Add text based on field type
-          let labelText = "";
-          if (fieldType === 'signature') {
-            labelText = `Signed by: ${signerName}`;
-          } else if (fieldType === 'initials') {
-            labelText = `Initialed by: ${signerName}`;
-          }
-          
+          // Add "Entered by: [name]" text
           const font = await pdfDoc.embedFont('Helvetica');
+          let labelText = `Entered by: ${signerName}`;
+          
           page.drawText(labelText, {
             x: outlineX + 5,
             y: outlineY - 15, // Below the field
@@ -1624,229 +1969,243 @@ export default class extends Controller {
             opacity: 1.0
           });
           
-          console.log(`DEBUG: Successfully added ${fieldType} border and text`);
+          console.log(`DEBUG: Successfully added text field border and text`);
         } catch (borderError) {
-          console.error(`DEBUG: Error drawing ${fieldType} border:`, borderError);
+          console.error(`DEBUG: Error drawing text field border:`, borderError);
         }
-      } else if (fieldType === 'text' || fieldType === 'date') {
-        // Get text content (handle both DOM elements and data objects)
-        let textContent = '';
-        
-        // Try to get text from DOM element
-        const textElement = field.querySelector ? field.querySelector('div') : null;
-        if (textElement) {
-          textContent = textElement.textContent || '';
-          console.log(`DEBUG: Found text content in div: "${textContent}"`);
-        } 
-        // If no DOM element found, try to get from value property
-        else if (field.value && typeof field.value === 'string') {
-          textContent = field.value;
-          console.log(`DEBUG: Using value property for text: "${textContent}"`);
-        }
-        // Try getting innerHTML if no div or value
-        else if (field.innerHTML) {
-          // Create a temporary element to strip HTML tags
-          const temp = document.createElement('div');
-          temp.innerHTML = field.innerHTML;
-          textContent = temp.textContent || '';
-          console.log(`DEBUG: Extracted text from innerHTML: "${textContent}"`);
-        }
-        // Try the dataset value as a last resort
-        else if (field.dataset && field.dataset.value) {
-          textContent = field.dataset.value;
-          console.log(`DEBUG: Using dataset value: "${textContent}"`);
-        }
-        
-        console.log(`DEBUG: Raw text content for ${fieldType} field: "${textContent}"`);
-        
-        // If still no text content, use default values
-        if (!textContent || textContent.trim() === '') {
-          textContent = fieldType === 'text' ? 'Text Content' : '01/01/2023';
-          console.log(`DEBUG: Using default text content: "${textContent}"`);
-        }
-        
-        // Clean the text content to avoid PDF encoding issues
-        textContent = textContent.trim()
-          .replace(/[\r\n\t\f\v]/g, ' ')  // Replace newlines and tabs with spaces
-          .replace(/\s+/g, ' ')          // Replace multiple spaces with single space
-          .replace(/[^\x20-\x7E]/g, ''); // Remove non-printable ASCII characters
-        
-        console.log(`DEBUG: Cleaned text content for ${fieldType} field: "${textContent}"`);
-        
-        // Skip if content is empty, placeholder, or common placeholder values
-        const placeholders = ['[text]', '[date]', 'undefined', 'type here', 'mm/dd/yyyy'];
-        const isPlaceholder = placeholders.some(p => textContent.toLowerCase().includes(p.toLowerCase()));
-        
-        if (isPlaceholder) {
-          // Replace placeholders with useful content instead of skipping
-          textContent = fieldType === 'text' ? 'Sample Text' : '01/01/2023';
-          console.log(`DEBUG: Replaced placeholder with: "${textContent}"`);
-        }
-        
+      } catch (textError) {
+        console.error(`DEBUG: Error adding text:`, textError);
+        // Try a fallback approach with simpler text rendering
         try {
-          // Embed a standard font
           const font = await pdfDoc.embedFont('Helvetica');
-          
-          // Use a fixed font size rather than scaling to fit the field
-          const fontSize = 12; // Fixed large font size
-          
-          // Calculate text width but don't center it - just add a fixed margin
-          const textWidth = font.widthOfTextAtSize(textContent, fontSize);
-          const xPosition = x + 5; // Fixed small left margin
-          
-          // Position from bottom with a fixed offset
-          const yPosition = y - (height / 2) + (fontSize / 3);
-          
-          console.log(`DEBUG: Drawing ${fieldType} text with fixed font size ${fontSize} at (${xPosition}, ${yPosition})`);
-          
-          // Removed the background box and borders - text will be drawn directly on the PDF
-          
-          // For date fields, format them in a more recognizable date format if possible
-          if (fieldType === 'date') {
-            try {
-              // Check if the text is a valid date
-              const parsedDate = new Date(textContent);
-              if (!isNaN(parsedDate.getTime())) {
-                // If it's a valid date, format it consistently
-                textContent = parsedDate.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric'
-                });
-                console.log(`DEBUG: Reformatted date to: "${textContent}"`);
-              }
-            } catch (dateError) {
-              console.log(`DEBUG: Could not parse as date: "${textContent}"`);
-              // Keep original text if date parsing fails
-            }
-          }
-          
-          // Draw the text content without trying to fit it in the box
-          page.drawText(textContent, {
-            x: xPosition,
-            y: yPosition,
-            size: fontSize,
-            font: font,
-            color: rgb(0, 0, 0),
-            lineHeight: fontSize * 1.2
+          page.drawText(textContent.substring(0, 50), { // Limit text length as a fallback
+            x: x + 5,
+            y: y - 15,
+            size: 10,
+            font: font
           });
-          
-          // For date fields, add a small calendar icon if there's room
-          if (fieldType === 'date' && width > 80) {
-            const iconSize = Math.min(16, height * 0.3);
-            const iconX = x + width - iconSize - 5;
-            const iconY = y - iconSize - 5;
-            
-            // Simple calendar icon (just a rectangle with a line)
-            page.drawRectangle({
-              x: iconX,
-              y: iconY,
-              width: iconSize,
-              height: iconSize,
-              borderColor: rgb(0.5, 0.3, 0.0),
-              borderWidth: 1,
-              color: rgb(1, 1, 1),
-              opacity: 0.9
-            });
-            
-            // Calendar top line
-            page.drawLine({
-              start: { x: iconX, y: iconY - iconSize * 0.25 },
-              end: { x: iconX + iconSize, y: iconY - iconSize * 0.25 },
-              thickness: 1,
-              color: rgb(0.5, 0.3, 0.0),
-              opacity: 0.9
-            });
-          }
-          
-          console.log(`DEBUG: Successfully added ${fieldType} text to PDF`);
-          
-          // Add a C-shaped outline and "Entered by" text for text/date fields
-          try {
-            // Get a name for the field - default to "Signer" if not available
-            let signerName = "Signer";
-            
-            // Try to get name from field data attributes or parent elements if available
-            if (field.dataset && field.dataset.signerName) {
-              signerName = field.dataset.signerName;
-            } else if (field.closest && field.closest('[data-signer-name]')) {
-              signerName = field.closest('[data-signer-name]').dataset.signerName;
-            }
-            
-            // Calculate position for C-shaped outline - adjust for text fields which have different positioning
-            const outlineX = x - 10; // Left of the text
-            const outlineY = y - height; // Bottom of the field
-            const outlineHeight = height + 5; // Slightly taller than the field
-            const outlineWidth = 30; // Width of the C shape
-            
-            console.log(`DEBUG: Drawing C-shaped outline for ${fieldType} field`);
-            
-            // Left vertical line
-            page.drawLine({
-              start: { x: outlineX, y: outlineY },
-              end: { x: outlineX, y: outlineY + outlineHeight },
-              thickness: 2,
-              color: rgb(0, 0, 0),
-              opacity: 0.9
-            });
-            
-            // Top horizontal line (partial)
-            page.drawLine({
-              start: { x: outlineX, y: outlineY + outlineHeight },
-              end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
-              thickness: 2,
-              color: rgb(0, 0, 0),
-              opacity: 0.9
-            });
-            
-            // Bottom horizontal line (partial)
-            page.drawLine({
-              start: { x: outlineX, y: outlineY },
-              end: { x: outlineX + outlineWidth, y: outlineY },
-              thickness: 2,
-              color: rgb(0, 0, 0),
-              opacity: 0.9
-            });
-            
-            // Add "Entered by: [name]" text
-            const font = await pdfDoc.embedFont('Helvetica');
-            let labelText = fieldType === 'date' ? `Date entered by: ${signerName}` : `Entered by: ${signerName}`;
-            
-            page.drawText(labelText, {
-              x: outlineX + 5,
-              y: outlineY - 15, // Below the field
-              size: 9, // Small font size
-              font: font,
-              color: rgb(0, 0, 0),
-              opacity: 1.0
-            });
-            
-            console.log(`DEBUG: Successfully added ${fieldType} border and text`);
-          } catch (borderError) {
-            console.error(`DEBUG: Error drawing ${fieldType} border:`, borderError);
-          }
-        } catch (textError) {
-          console.error(`DEBUG: Error adding ${fieldType} text:`, textError);
-          // Try a fallback approach with simpler text rendering
-          try {
-            const font = await pdfDoc.embedFont('Helvetica');
-            page.drawText(textContent.substring(0, 50), { // Limit text length as a fallback
-              x: x + 5,
-              y: y - 15,
-              size: 10,
-              font: font
-            });
-            console.log(`DEBUG: Used fallback approach for text rendering`);
-          } catch (fallbackError) {
-            console.error(`DEBUG: Even fallback text rendering failed:`, fallbackError);
-          }
+          console.log(`DEBUG: Used fallback approach for text rendering`);
+        } catch (fallbackError) {
+          console.error(`DEBUG: Even fallback text rendering failed:`, fallbackError);
         }
-      } else {
-        console.warn(`DEBUG: Unsupported field type: ${fieldType}`);
       }
     } catch (error) {
-      console.error("DEBUG: Error in addFieldToPdf:", error);
-      // Don't throw the error, just log it to allow processing of other fields
+      console.error("DEBUG: Error in addTextFieldToPdf:", error);
+    }
+  }
+  
+  async addDateFieldToPdf(pdfDoc, page, field, x, y, width, height, rgb) {
+    try {
+      // Get text content (handle both DOM elements and data objects)
+      let textContent = '';
+      
+      // Try to get text from DOM element
+      const textElement = field.querySelector ? field.querySelector('div') : null;
+      if (textElement) {
+        textContent = textElement.textContent || '';
+        console.log(`DEBUG: Found text content in div: "${textContent}"`);
+      } 
+      // If no DOM element found, try to get from value property
+      else if (field.value && typeof field.value === 'string') {
+        textContent = field.value;
+        console.log(`DEBUG: Using value property for text: "${textContent}"`);
+      }
+      // Try getting innerHTML if no div or value
+      else if (field.innerHTML) {
+        // Create a temporary element to strip HTML tags
+        const temp = document.createElement('div');
+        temp.innerHTML = field.innerHTML;
+        textContent = temp.textContent || '';
+        console.log(`DEBUG: Extracted text from innerHTML: "${textContent}"`);
+      }
+      // Try the dataset value as a last resort
+      else if (field.dataset && field.dataset.value) {
+        textContent = field.dataset.value;
+        console.log(`DEBUG: Using dataset value: "${textContent}"`);
+      }
+      
+      console.log(`DEBUG: Raw text content for date field: "${textContent}"`);
+      
+      // If still no text content, use default values
+      if (!textContent || textContent.trim() === '') {
+        textContent = '01/01/2023';
+        console.log(`DEBUG: Using default text content: "${textContent}"`);
+      }
+      
+      // Clean the text content to avoid PDF encoding issues
+      textContent = textContent.trim()
+        .replace(/[\r\n\t\f\v]/g, ' ')  // Replace newlines and tabs with spaces
+        .replace(/\s+/g, ' ')          // Replace multiple spaces with single space
+        .replace(/[^\x20-\x7E]/g, ''); // Remove non-printable ASCII characters
+      
+      console.log(`DEBUG: Cleaned text content for date field: "${textContent}"`);
+      
+      // Skip if content is empty, placeholder, or common placeholder values
+      const placeholders = ['[text]', '[date]', 'undefined', 'type here', 'mm/dd/yyyy'];
+      const isPlaceholder = placeholders.some(p => textContent.toLowerCase().includes(p.toLowerCase()));
+      
+      if (isPlaceholder) {
+        // Replace placeholders with useful content instead of skipping
+        textContent = '01/01/2023';
+        console.log(`DEBUG: Replaced placeholder with: "${textContent}"`);
+      }
+      
+      try {
+        // Embed a standard font
+        const font = await pdfDoc.embedFont('Helvetica');
+        
+        // Use a fixed font size rather than scaling to fit the field
+        const fontSize = 12; // Fixed large font size
+        
+        // Calculate text width but don't center it - just add a fixed margin
+        const textWidth = font.widthOfTextAtSize(textContent, fontSize);
+        const xPosition = x + 5; // Fixed small left margin
+        
+        // Position from bottom with a fixed offset
+        const yPosition = y - (height / 2) + (fontSize / 3);
+        
+        console.log(`DEBUG: Drawing date text with fixed font size ${fontSize} at (${xPosition}, ${yPosition})`);
+        
+        // For date fields, format them in a more recognizable date format if possible
+        try {
+          // Check if the text is a valid date
+          const parsedDate = new Date(textContent);
+          if (!isNaN(parsedDate.getTime())) {
+            // If it's a valid date, format it consistently
+            textContent = parsedDate.toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            });
+            console.log(`DEBUG: Reformatted date to: "${textContent}"`);
+          }
+        } catch (dateError) {
+          console.log(`DEBUG: Could not parse as date: "${textContent}"`);
+          // Keep original text if date parsing fails
+        }
+        
+        // Draw the text content without trying to fit it in the box
+        page.drawText(textContent, {
+          x: xPosition,
+          y: yPosition,
+          size: fontSize,
+          font: font,
+          color: rgb(0, 0, 0),
+          lineHeight: fontSize * 1.2
+        });
+        
+        // For date fields, add a small calendar icon if there's room
+        if (width > 80) {
+          const iconSize = Math.min(16, height * 0.3);
+          const iconX = x + width - iconSize - 5;
+          const iconY = y - iconSize - 5;
+          
+          // Simple calendar icon (just a rectangle with a line)
+          page.drawRectangle({
+            x: iconX,
+            y: iconY,
+            width: iconSize,
+            height: iconSize,
+            borderColor: rgb(0.5, 0.3, 0.0),
+            borderWidth: 1,
+            color: rgb(1, 1, 1),
+            opacity: 0.9
+          });
+          
+          // Calendar top line
+          page.drawLine({
+            start: { x: iconX, y: iconY - iconSize * 0.25 },
+            end: { x: iconX + iconSize, y: iconY - iconSize * 0.25 },
+            thickness: 1,
+            color: rgb(0.5, 0.3, 0.0),
+            opacity: 0.9
+          });
+        }
+        
+        console.log(`DEBUG: Successfully added date text to PDF`);
+        
+        // Add a C-shaped outline and "Date entered by" text for date fields
+        try {
+          // Get a name for the field - default to "Signer" if not available
+          let signerName = "Signer";
+          
+          // Try to get name from field data attributes or parent elements if available
+          if (field.dataset && field.dataset.signerName) {
+            signerName = field.dataset.signerName;
+          } else if (field.closest && field.closest('[data-signer-name]')) {
+            signerName = field.closest('[data-signer-name]').dataset.signerName;
+          }
+          
+          // Adjusted C-Box positioning for date fields
+          const outlineX = x - 10; // Keep existing left position
+          const outlineY = y - height; // Keep existing bottom position
+          const outlineHeight = height + 15; // Increase height to move top line up by 10px
+          const outlineWidth = 30; // Keep existing width
+          
+          console.log(`DEBUG: Drawing C-shaped outline for date field`);
+          
+          // Left vertical line
+          page.drawLine({
+            start: { x: outlineX, y: outlineY },
+            end: { x: outlineX, y: outlineY + outlineHeight },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Top horizontal line (adjusted)
+          page.drawLine({
+            start: { x: outlineX, y: outlineY + outlineHeight },
+            end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Bottom horizontal line (unchanged)
+          page.drawLine({
+            start: { x: outlineX, y: outlineY },
+            end: { x: outlineX + outlineWidth, y: outlineY },
+            thickness: 2,
+            color: rgb(0, 0, 0),
+            opacity: 0.9
+          });
+          
+          // Add "Date entered by: [name]" text
+          const font = await pdfDoc.embedFont('Helvetica');
+          let labelText = `Date entered by: ${signerName}`;
+          
+          page.drawText(labelText, {
+            x: outlineX + 5,
+            y: outlineY - 15, // Below the field
+            size: 9, // Small font size
+            font: font,
+            color: rgb(0, 0, 0),
+            opacity: 1.0
+          });
+          
+          console.log(`DEBUG: Successfully added date field border and text`);
+        } catch (borderError) {
+          console.error(`DEBUG: Error drawing date field border:`, borderError);
+        }
+      } catch (textError) {
+        console.error(`DEBUG: Error adding date text:`, textError);
+        // Try a fallback approach with simpler text rendering
+        try {
+          const font = await pdfDoc.embedFont('Helvetica');
+          page.drawText(textContent.substring(0, 50), { // Limit text length as a fallback
+            x: x + 5,
+            y: y - 15,
+            size: 10,
+            font: font
+          });
+          console.log(`DEBUG: Used fallback approach for date text rendering`);
+        } catch (fallbackError) {
+          console.error(`DEBUG: Even fallback text rendering failed:`, fallbackError);
+        }
+      }
+    } catch (error) {
+      console.error("DEBUG: Error in addDateFieldToPdf:", error);
     }
   }
   
