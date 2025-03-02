@@ -1403,17 +1403,9 @@ export default class EditorFieldPlacementController extends Controller {
       previousIndicator.remove();
     }
     
-    // If a signer is selected (not the default option)
-    if (selectedIndex > 0) {
-      // Create a color indicator
-      const colorIndicator = document.createElement('span');
-      colorIndicator.classList.add('signer-color-indicator', `signer-color-${selectedIndex}`);
-      
-      // Insert it before the select
-      this.signerSelectTarget.parentNode.insertBefore(colorIndicator, this.signerSelectTarget);
-      
-      console.log(`Added color indicator for signer index ${selectedIndex}`);
-    }
+    // No longer adding color indicator elements
+    
+    console.log(`Updated signer selection to index ${selectedIndex}`);
   }
 
   // Add a new method to verify and ensure fields remain visible
