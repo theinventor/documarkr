@@ -1594,11 +1594,11 @@ export default class extends Controller {
         const xOffsetValue = typeof xOffset !== 'undefined' ? xOffset : 0;
         const yOffsetValue = typeof yOffset !== 'undefined' ? yOffset : 0;
         
-        // Calculate position for C-shaped outline
-        const outlineX = x + xOffsetValue - 10; // Slightly to the left of the field
-        const outlineY = y - drawHeightValue - yOffsetValue; // Bottom of field
-        const outlineHeight = drawHeightValue + 10; // Slightly taller than the field
-        const outlineWidth = 30; // Width of the C shape
+        // Adjusted C-Box positioning
+        const outlineX = x - 20; // Move left side 10px further left
+        const outlineY = y - height - 20; // Lower bottom line by 20px
+        const outlineHeight = height + 30; // Increase height to keep top line unchanged
+        const outlineWidth = 30; // Keep existing width
         
         console.log(`DEBUG: Drawing C-shaped outline for signature field with dimensions: w=${drawWidthValue}, h=${drawHeightValue}`);
         
@@ -1611,7 +1611,7 @@ export default class extends Controller {
           opacity: 0.9
         });
         
-        // Top horizontal line (partial)
+        // Top horizontal line (unchanged)
         page.drawLine({
           start: { x: outlineX, y: outlineY + outlineHeight },
           end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
@@ -1620,7 +1620,7 @@ export default class extends Controller {
           opacity: 0.9
         });
         
-        // Bottom horizontal line (partial)
+        // Bottom horizontal line (adjusted)
         page.drawLine({
           start: { x: outlineX, y: outlineY },
           end: { x: outlineX + outlineWidth, y: outlineY },
