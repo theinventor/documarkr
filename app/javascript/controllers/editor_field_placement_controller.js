@@ -858,8 +858,8 @@ export default class EditorFieldPlacementController extends Controller {
     
     this.fields.push(fieldObj);
     
-    // Add to the fields list in the sidebar
-    this.addFieldToList(fieldData.id, fieldData);
+    // Immediately add to sidebar list
+    this.addFieldToList(fieldId, fieldObj);
   }
 
   saveField(fieldData, fieldId) {
@@ -1584,6 +1584,9 @@ export default class EditorFieldPlacementController extends Controller {
     };
     
     this.fields.push(fieldObj);
+    
+    // Immediately add to sidebar list
+    this.addFieldToList(fieldId, fieldObj);
     
     // Save the field to the server
     this.saveField(fieldObj, fieldId);
