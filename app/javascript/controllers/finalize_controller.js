@@ -2136,11 +2136,11 @@ export default class extends Controller {
             signerName = field.closest('[data-signer-name]').dataset.signerName;
           }
           
-          // Calculate position for C-shaped outline - adjust for date fields which have different positioning
-          const outlineX = x - 10; // Left of the text
-          const outlineY = y - height; // Bottom of the field
-          const outlineHeight = height + 5; // Slightly taller than the field
-          const outlineWidth = 30; // Width of the C shape
+          // Adjusted C-Box positioning for date fields
+          const outlineX = x - 10; // Keep existing left position
+          const outlineY = y - height; // Keep existing bottom position
+          const outlineHeight = height + 15; // Increase height to move top line up by 10px
+          const outlineWidth = 30; // Keep existing width
           
           console.log(`DEBUG: Drawing C-shaped outline for date field`);
           
@@ -2153,7 +2153,7 @@ export default class extends Controller {
             opacity: 0.9
           });
           
-          // Top horizontal line (partial)
+          // Top horizontal line (adjusted)
           page.drawLine({
             start: { x: outlineX, y: outlineY + outlineHeight },
             end: { x: outlineX + outlineWidth, y: outlineY + outlineHeight },
@@ -2162,7 +2162,7 @@ export default class extends Controller {
             opacity: 0.9
           });
           
-          // Bottom horizontal line (partial)
+          // Bottom horizontal line (unchanged)
           page.drawLine({
             start: { x: outlineX, y: outlineY },
             end: { x: outlineX + outlineWidth, y: outlineY },
