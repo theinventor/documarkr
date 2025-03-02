@@ -607,7 +607,7 @@ export default class EditorFieldPlacementController extends Controller {
     const deleteButton = document.createElement("button")
     deleteButton.classList.add("text-red-600", "hover:text-red-800")
     deleteButton.dataset.action = "editor-field-placement#deleteField"
-    deleteButton.dataset.fieldId = fieldId
+    deleteButton.dataset.fieldId = fieldData.serverId || fieldId
     deleteButton.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -625,53 +625,32 @@ export default class EditorFieldPlacementController extends Controller {
   deleteField(event) {
     const fieldId = event.currentTarget.dataset.fieldId
     console.log(`Deleting field: ${fieldId}`)
-    
+
     let fieldIndex = -1
     const numericId = parseInt(fieldId)
-    
-    // First try to find by serverId (for numeric IDs from list)
+
     if (!isNaN(numericId)) {
-      console.log(`Searching for field with serverId: ${numericId}`)
       fieldIndex = this.fields.findIndex(field => field.serverId === numericId)
-    } 
-    
-    // If not found, try with db- prefix (for element IDs)
-    if (fieldIndex === -1) {
-      const prefixedId = fieldId.toString().startsWith('db-') ? fieldId : `db-${fieldId}`
-      console.log(`Searching for field with element id: ${prefixedId}`)
-      fieldIndex = this.fields.findIndex(field => field.id === prefixedId)
     }
-    
-    console.log(`Field index found: ${fieldIndex}`)
-    
+
     if (fieldIndex !== -1) {
       const field = this.fields[fieldIndex]
-      console.log(`Found field to delete:`, field)
-      
-      // Remove the field element from the DOM
+
       if (field.element && field.element.parentNode) {
         field.element.parentNode.removeChild(field.element)
-        console.log(`Removed field element from DOM`)
       }
-      
-      // If the field has a server ID, delete it from the server
+
       if (field.serverId) {
-        console.log(`Deleting field from server with serverId: ${field.serverId}`)
         this.deleteFieldFromServer(field.serverId)
       }
-      
-      // Remove the field from our array
+
       this.fields.splice(fieldIndex, 1)
-      console.log(`Removed field from fields array. Fields remaining: ${this.fields.length}`)
-    } else {
-      console.warn(`Could not find field with id: ${fieldId} in fields array`)
     }
-    
-    // Remove the list item from the DOM
-    const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${fieldId}"]`)
+
+    // Remove the entire list item from the DOM
+    const listItem = event.currentTarget.closest('li')
     if (listItem) {
-      listItem.parentNode.removeChild(listItem)
-      console.log(`Removed field from sidebar list`)
+      listItem.remove()
     }
   }
 
@@ -880,7 +859,6 @@ export default class EditorFieldPlacementController extends Controller {
   }
   
   sendFieldToServer(formData, fieldId) {
-    // Send the field data to the server
     fetch(`/documents/${this.documentIdValue}/form_fields`, {
       method: "POST",
       body: formData,
@@ -891,24 +869,24 @@ export default class EditorFieldPlacementController extends Controller {
     .then(response => response.json())
     .then(data => {
       console.log("Field saved successfully:", data)
-      
-      // If the field was saved successfully, update the field ID in our local array
+
       if (data.id) {
         const index = this.fields.findIndex(field => field.id === fieldId)
         if (index !== -1) {
           this.fields[index].serverId = data.id
-          
-          // Update the ID in the DOM
+
           const fieldElement = document.getElementById(fieldId)
           if (fieldElement) {
             fieldElement.id = `db-${data.id}`
           }
-          
-          // Update the ID in the fields list
+
           const listItem = this.fieldsListTarget.querySelector(`[data-field-id="${fieldId}"]`)
           if (listItem) {
             listItem.dataset.fieldId = `db-${data.id}`
-            listItem.querySelector('button').dataset.fieldId = `db-${data.id}`
+            const deleteButton = listItem.querySelector('button')
+            if (deleteButton) {
+              deleteButton.dataset.fieldId = data.id
+            }
           }
         }
       }
