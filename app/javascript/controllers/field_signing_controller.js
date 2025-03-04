@@ -484,21 +484,35 @@ export default class extends Controller {
     this.currentFieldValue = fieldId;
     window.currentFieldId = fieldId; // Also store in global var for fallback methods
     
-    // Check if we have a previously saved signature to reuse
-    const lastSignature = localStorage.getItem('lastSignature');
-    if (lastSignature) {
-      console.log("Found previously saved signature, applying automatically");
-      
-      // Apply the signature to this field without opening modal
-      const processedFieldId = fieldId.replace(/^field-/, '');
-      this.updateField(processedFieldId, lastSignature);
-      
-      // No need to open the modal
-      return;
+    // Mar 8, 2023: Auto-apply saved signatures or initials based on field type
+    if (fieldType === 'signature') {
+      const lastSignature = localStorage.getItem('lastSignature');
+      if (lastSignature) {
+        console.log("Found previously saved signature, applying automatically to signature field");
+        
+        // Apply the signature to this field without opening modal
+        const processedFieldId = fieldId.replace(/^field-/, '');
+        this.updateField(processedFieldId, lastSignature);
+        
+        // No need to open the modal
+        return;
+      }
+    } else if (fieldType === 'initials') {
+      const lastInitials = localStorage.getItem('lastInitials');
+      if (lastInitials) {
+        console.log("Found previously saved initials, applying automatically to initials field");
+        
+        // Apply the initials to this field without opening modal
+        const processedFieldId = fieldId.replace(/^field-/, '');
+        this.updateField(processedFieldId, lastInitials);
+        
+        // No need to open the modal
+        return;
+      }
     }
     
-    // If no previous signature, proceed with opening the modal
-    console.log("No previous signature found, opening signature modal");
+    // For fields without saved signatures/initials, proceed with opening the modal
+    console.log(`Opening modal for ${fieldType} field`);
     
     // Try multiple approaches to open the modal
     
@@ -677,13 +691,29 @@ export default class extends Controller {
       }
     }
     
-    // Save the signature to localStorage for reuse
+    // Get the field type to determine if this is a signature or initials
+    let fieldType = 'signature'; // Default to signature
+    const targetField = this.fieldTargets.find(f => 
+      f.dataset.fieldId === fieldId || f.dataset.fieldId === `field-${fieldId}`
+    );
+    
+    if (targetField) {
+      fieldType = targetField.dataset.fieldType;
+    }
+    
+    // Save the signature or initials to localStorage for future reuse
     if (signatureData) {
       try {
-        localStorage.setItem('lastSignature', signatureData);
-        console.log("Saved signature to localStorage for future use");
+        // Mar 8, 2023: Save signatures and initials separately
+        if (fieldType === 'signature') {
+          localStorage.setItem('lastSignature', signatureData);
+          console.log("Saved signature to localStorage for future use");
+        } else if (fieldType === 'initials') {
+          localStorage.setItem('lastInitials', signatureData);
+          console.log("Saved initials to localStorage for future use");
+        }
       } catch (e) {
-        console.error("Error saving signature to localStorage:", e);
+        console.error("Error saving to localStorage:", e);
       }
     }
     
