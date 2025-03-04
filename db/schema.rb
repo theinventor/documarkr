@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_02_26_211838) do
+ActiveRecord::Schema[8.0].define(version: 2025_03_03_173000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -66,6 +66,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_02_26_211838) do
     t.string "name"
     t.string "email"
     t.string "token"
+    t.string "signature_font"
+    t.string "initials_font"
     t.index ["document_id", "sign_order"], name: "index_document_signers_on_document_id_and_sign_order"
     t.index ["document_id"], name: "index_document_signers_on_document_id"
     t.index ["user_id"], name: "index_document_signers_on_user_id"

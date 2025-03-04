@@ -17,3 +17,16 @@
   z-index: 20;
   /* Add other styles as needed */
 }
+
+/* Font classes for signature fonts */
+.font-handwriting1 {
+  font-family: 'Cedarville Cursive', cursive;
+}
+
+.font-handwriting2 {
+  font-family: 'Dancing Script', cursive;
+}
+
+.font-handwriting3 {
+  font-family: 'Shadows Into Light', cursive;
+}

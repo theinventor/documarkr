@@ -1,6 +1,6 @@
 class PublicSigningController < ApplicationController
   # Skip authentication for all actions in this controller
-  skip_before_action :authenticate_user!, only: [ :show, :sign_complete, :complete, :complete_field, :thank_you ]
+  skip_before_action :authenticate_user!, only: [ :show, :sign_complete, :complete, :complete_field, :thank_you, :get_font_preference, :save_font_preference ]
 
   # GET /sign/:id/:token
   def show
@@ -145,5 +145,63 @@ class PublicSigningController < ApplicationController
 
     # Render the thank you page regardless of token validity
     render :thank_you
+  end
+  
+  # GET /sign/:id/get_font_preference
+  def get_font_preference
+    @document = Document.find_by(id: params[:id])
+    @token = params[:token]
+    
+    if @document.nil? || @token.blank?
+      render json: { error: "Invalid document or token" }, status: :not_found
+      return
+    end
+    
+    @document_signer = @document.document_signers.find_by(token: @token)
+    
+    if @document_signer.nil?
+      render json: { error: "Invalid signer" }, status: :not_found
+      return
+    end
+    
+    # Return the signer's font preferences
+    render json: {
+      signature_font: @document_signer.signature_font,
+      initials_font: @document_signer.initials_font,
+      name: @document_signer.name
+    }
+  end
+  
+  # POST /sign/:id/save_font_preference
+  def save_font_preference
+    @document = Document.find_by(id: params[:id])
+    @token = params[:token]
+    
+    if @document.nil? || @token.blank?
+      render json: { error: "Invalid document or token" }, status: :not_found
+      return
+    end
+    
+    @document_signer = @document.document_signers.find_by(token: @token)
+    
+    if @document_signer.nil?
+      render json: { error: "Invalid signer" }, status: :not_found
+      return
+    end
+    
+    # Update font preferences
+    update_params = {}
+    update_params[:signature_font] = params[:signature_font] if params[:signature_font].present?
+    update_params[:initials_font] = params[:initials_font] if params[:initials_font].present?
+    
+    if @document_signer.update(update_params)
+      render json: { 
+        success: true, 
+        signature_font: @document_signer.signature_font,
+        initials_font: @document_signer.initials_font
+      }
+    else
+      render json: { error: @document_signer.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
   end
 end

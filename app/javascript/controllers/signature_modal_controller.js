@@ -1,65 +1,247 @@
 import { Controller } from "@hotwired/stimulus"
 
+// Define signature fonts directly in this controller to avoid import issues
+const SIGNATURE_FONTS = {
+  handwriting1: {
+    name: "Cedarville Cursive",
+    family: "'Cedarville Cursive', cursive",
+    url: "https://fonts.googleapis.com/css2?family=Cedarville+Cursive&display=swap",
+    previewText: "John Doe"
+  },
+  handwriting2: {
+    name: "Dancing Script",
+    family: "'Dancing Script', cursive",
+    url: "https://fonts.googleapis.com/css2?family=Dancing+Script:wght@500&display=swap",
+    previewText: "John Doe"
+  },
+  handwriting3: {
+    name: "Shadows Into Light",
+    family: "'Shadows Into Light', cursive",
+    url: "https://fonts.googleapis.com/css2?family=Shadows+Into+Light&display=swap", 
+    previewText: "John Doe"
+  }
+}
+
+// Helper functions needed for signatures - inlined to avoid import issues
+function loadSignatureFonts() {
+  // Actually load the fonts instead of just logging a message
+  Object.values(SIGNATURE_FONTS).forEach(font => {
+    // Create a link element for each font
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = font.url;
+    document.head.appendChild(link);
+    
+    // Create a preload element for each font
+    const preload = document.createElement('link');
+    preload.rel = 'preload';
+    preload.as = 'font';
+    preload.href = font.url;
+    preload.crossOrigin = 'anonymous';
+    document.head.appendChild(preload);
+    
+    console.log(`Loading font: ${font.name} from ${font.url}`);
+  });
+}
+
+function renderTextWithFont(canvas, text, fontKey, options = {}) {
+  const ctx = canvas.getContext('2d');
+  const font = SIGNATURE_FONTS[fontKey];
+  
+  if (!font) {
+    console.error(`Font not found: ${fontKey}`);
+    return false;
+  }
+  
+  // Clear canvas
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Set font properties
+  const fontSize = options.fontSize || Math.min(canvas.height * 0.5, 60);
+  ctx.font = `${fontSize}px ${font.family}`;
+  console.log(`Rendering text "${text}" with font: ${ctx.font}`);
+  
+  ctx.fillStyle = options.color || 'black';
+  ctx.textAlign = options.align || 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Calculate position
+  const x = options.x || canvas.width / 2;
+  const y = options.y || canvas.height / 2;
+  
+  // Draw text
+  ctx.fillText(text, x, y);
+  
+  // Debug: Draw a border around the canvas to ensure it's visible
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, canvas.width, canvas.height);
+  
+  return true;
+}
+
+function createFontPreviews(container, text, options = {}) {
+  if (!container) return;
+  
+  // Clear container
+  container.innerHTML = '';
+  
+  // Create preview for each font - using classes instead of inline styles for CSP
+  Object.entries(SIGNATURE_FONTS).forEach(([key, font]) => {
+    // Create preview container
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'font-preview-item p-3 border rounded-md cursor-pointer hover:bg-blue-50';
+    previewContainer.setAttribute('data-font-key', key);
+    
+    // Create font preview
+    const preview = document.createElement('div');
+    preview.className = `font-preview-text text-center py-3 font-${key}`;
+    preview.textContent = text || font.previewText;
+    
+    // Create font name label
+    const label = document.createElement('div');
+    label.className = 'font-name text-sm text-center mt-2 text-gray-700';
+    label.textContent = font.name;
+    
+    // Add to container
+    previewContainer.appendChild(preview);
+    previewContainer.appendChild(label);
+    container.appendChild(previewContainer);
+    
+    // Add click handler
+    previewContainer.addEventListener('click', () => {
+      if (options.onSelect) {
+        options.onSelect(key, font);
+      }
+      
+      // Add selected styling
+      const items = container.querySelectorAll('.font-preview-item');
+      items.forEach(item => {
+        item.classList.remove('border-blue-500', 'bg-blue-50');
+      });
+      previewContainer.classList.add('border-blue-500', 'bg-blue-50');
+    });
+  });
+}
+
+function generateSignatureImageUrl(text, fontKey, options = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = options.width || 400;
+  canvas.height = options.height || 150;
+  
+  renderTextWithFont(canvas, text, fontKey, options);
+  
+  return canvas.toDataURL('image/png');
+}
+
 // Connects to data-controller="signature-modal"
 export default class extends Controller {
-  static targets = ["modal", "backdrop", "closeButton", "canvas", "signatureContainer", "initialsContainer", "buttonContainer"]
+  static targets = [
+    "modal", "backdrop", "closeButton", "canvas", 
+    "signatureContainer", "initialsContainer", "buttonContainer",
+    "nameInput", "initialsInput", 
+    "fontPreviewsContainer", "initialsFontPreviewsContainer",
+    "previewCanvas", "initialsPreviewCanvas",
+    "previewContainer", "initialsPreviewContainer",
+    "previewPlaceholder", "initialsPreviewPlaceholder",
+    "saveSignatureButton", "saveInitialsButton"
+  ]
+  
+  static values = {
+    selectedFont: String,
+    selectedInitialsFont: String
+  }
   
   connect() {
     console.log("Signature modal controller connected");
+    
+    // Store reference to this controller instance in the DOM element
+    // This makes it accessible via __stimulusController for direct access
+    if (this.element) {
+      this.element.__stimulusController = this;
+      console.log("Stored controller reference in element");
+    }
+    
     this.setupModalHandlers();
     
-    // CRITICAL FIX: Add direct event listeners to ALL signature and initial fields to ensure modal opens
-    console.log("Adding direct field click handlers to open signature modal");
+    // Load fonts for handwriting styles
+    loadSignatureFonts();
+    
+    // Pre-initialize font previews for both signature and initials
+    if (this.hasFontPreviewsContainerTarget && this.fontPreviewsContainerTarget.children.length === 0) {
+      console.log("Pre-initializing signature font previews");
+      this.initFontSelectionUI('signature');
+    }
+    
+    if (this.hasInitialsFontPreviewsContainerTarget && this.initialsFontPreviewsContainerTarget.children.length === 0) {
+      console.log("Pre-initializing initials font previews");
+      this.initFontSelectionUI('initials');
+    }
     
     // Add global method for opening modal that works even if controller actions fail
-    window.openSignatureModal = (fieldType, fieldId) => {
+    window.openSigningModal = (fieldType, fieldId) => {
       console.log("Direct call to open signature modal:", fieldType, fieldId);
-      this.open(fieldType);
-      // Store the field ID globally for reference
-      window.currentFieldId = fieldId;
+      this.open(fieldType, fieldId);
+    };
+    
+    // Make save methods globally accessible
+    window.saveSignature = () => {
+      console.log("Direct call to save signature");
+      this.saveSignature();
+    };
+    
+    window.saveInitials = () => {
+      console.log("Direct call to save initials");
+      this.saveInitials();
     };
     
     // Wait for DOM to be fully loaded
     setTimeout(() => {
-      // Find all signature and initials fields
-      const fields = document.querySelectorAll('[data-field-type="signature"], [data-field-type="initials"]');
-      console.log(`Found ${fields.length} signature/initial fields to attach handlers to`);
-      
-      fields.forEach(field => {
-        const fieldType = field.dataset.fieldType;
-        const fieldId = field.dataset.fieldId;
-        
-        console.log(`Adding direct click handler to ${fieldType} field: ${fieldId}`);
-        
-        // Remove any existing click handlers to prevent duplicates
-        field.removeEventListener('click', field._modalOpenHandler);
-        
-        // Create a new handler
-        field._modalOpenHandler = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          console.log(`Direct field click on ${fieldType} field ${fieldId}`);
-          
-          // Store current field ID for reference
-          window.currentFieldId = fieldId;
-          
-          // Call our open method directly
-          this.open(fieldType);
-          
-          // Store the field ID in the field-signing controller as well
-          const fieldSigningController = document.querySelector('[data-controller="field-signing"]')?.__stimulusController;
-          if (fieldSigningController) {
-            fieldSigningController.currentFieldValue = fieldId;
-          }
-          
-          return false;
-        };
-        
-        // Add the click handler
-        field.addEventListener('click', field._modalOpenHandler);
-      });
+      // Attach field handlers
+      this.attachFieldHandlers();
     }, 300); // Wait for DOM to be fully ready
+  }
+  
+  attachFieldHandlers() {
+    // Find all signature and initials fields
+    const fields = document.querySelectorAll('[data-field-type="signature"], [data-field-type="initials"]');
+    console.log(`Found ${fields.length} signature/initial fields to attach handlers to`);
+    
+    fields.forEach(field => {
+      const fieldType = field.dataset.fieldType;
+      const fieldId = field.dataset.fieldId;
+      
+      console.log(`Adding direct click handler to ${fieldType} field: ${fieldId}`);
+      
+      // Remove any existing click handlers to prevent duplicates
+      field.removeEventListener('click', field._modalOpenHandler);
+      
+      // Create a new handler
+      field._modalOpenHandler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log(`Direct field click on ${fieldType} field ${fieldId}`);
+        
+        // Store current field ID for reference
+        window.currentFieldId = fieldId;
+        
+        // Call our open method directly
+        this.open(fieldType, fieldId);
+        
+        // Store the field ID in the field-signing controller as well
+        const fieldSigningController = document.querySelector('[data-controller="field-signing"]')?.__stimulusController;
+        if (fieldSigningController) {
+          fieldSigningController.currentFieldValue = fieldId;
+        }
+        
+        return false;
+      };
+      
+      // Add the click handler
+      field.addEventListener('click', field._modalOpenHandler);
+    });
   }
   
   setupModalHandlers() {
@@ -75,19 +257,15 @@ export default class extends Controller {
     
     // Setup escape key handler
     this.escapeHandler = (e) => {
-      if (e.key === 'Escape' && !this.modalTarget.classList.contains('hidden')) {
+      if (e.key === 'Escape' && this.hasModalTarget && !this.modalTarget.classList.contains('hidden')) {
         this.close();
       }
     };
     document.addEventListener('keydown', this.escapeHandler);
     
-    // Set up direct button handlers
-    this.setupButtonHandlers();
-    
     // Expose global methods
     window.openSigningModal = this.open.bind(this);
     window.closeSigningModal = this.close.bind(this);
-    window.testDrawOnCanvas = this.testDraw.bind(this);
     
     // NEW: Add a helper function to force drawing activation
     window.activateDrawingOnCurrentCanvas = () => {
@@ -320,8 +498,11 @@ export default class extends Controller {
                     const statusItem = document.querySelector(`.field-status-item[data-field-id="${window.currentFieldId}"]`);
                     if (statusItem) {
                       statusItem.dataset.fieldStatus = 'completed';
-                      statusItem.querySelector('.field-status').classList.remove('bg-gray-300');
-                      statusItem.querySelector('.field-status').classList.add('bg-green-500');
+                      const statusCircle = statusItem.querySelector('.field-status');
+                      if (statusCircle) {
+                        statusCircle.classList.remove('bg-gray-300');
+                        statusCircle.classList.add('bg-green-500');
+                      }
                     }
                   }
                 }
@@ -348,67 +529,25 @@ export default class extends Controller {
     delete window.testDrawOnCanvas;
   }
   
-  open(event) {
-    console.log("OPEN METHOD CALLED", event);
+  open(fieldType, fieldId) {
+    console.log("Opening modal for", fieldType, fieldId);
     
     try {
-      // Determine the field type from the event
-      let fieldType = null;
-      
-      // Handle different types of events to get the field type
-      if (typeof event === 'string') {
-        // Direct string provided (e.g., "signature" or "initials")
-        fieldType = event;
-      } else if (event && event.target) {
-        // Event with target (clicked element)
-        if (event.target.dataset && event.target.dataset.fieldType) {
-          fieldType = event.target.dataset.fieldType;
-        } else if (event.target.closest) {
-          // Try to find closest element with field-type data attribute
-          const fieldElement = event.target.closest('[data-field-type]');
-          if (fieldElement) {
-            fieldType = fieldElement.dataset.fieldType;
-          }
-        }
-      } else if (event && event.detail && event.detail.fieldType) {
-        // Custom event with fieldType in detail
-        fieldType = event.detail.fieldType;
-      }
-      
-      console.log("Field type determined:", fieldType);
-      this.fieldType = fieldType; // Store for later reference
-      
-      // Get the current field ID
-      let currentFieldId = null;
-      if (event && event.target && event.target.dataset && event.target.dataset.fieldId) {
-        currentFieldId = event.target.dataset.fieldId;
-      } else if (event && event.detail && event.detail.fieldId) {
-        currentFieldId = event.detail.fieldId;
-      } else if (event && event.target && event.target.closest) {
-        const fieldElement = event.target.closest('[data-field-id]');
-        if (fieldElement) {
-          currentFieldId = fieldElement.dataset.fieldId;
-        }
-      }
-      console.log("Current field ID:", currentFieldId);
-      this.currentFieldId = currentFieldId;
-      
-      // Find the correct container and canvas based on field type
-      const containerSelector = fieldType === 'signature' ? 'signatureContainer' : 'initialsContainer';
-      const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
+      // Store field type and ID for reference
+      this.fieldType = fieldType;
+      this.currentFieldId = fieldId;
+      window.currentFieldId = fieldId;
       
       // Show the modal
       if (this.hasModalTarget) {
         this.modalTarget.classList.remove('hidden');
         this.modalTarget.style.display = 'flex';
-        console.log("Modal displayed:", this.modalTarget);
       }
       
       // Show the backdrop
       if (this.hasBackdropTarget) {
         this.backdropTarget.classList.remove('hidden');
         this.backdropTarget.style.display = 'block';
-        console.log("Backdrop displayed");
       }
       
       // Hide all containers first
@@ -418,116 +557,545 @@ export default class extends Controller {
         container.style.display = 'none';
       });
       
+      // Find the correct container
+      const containerSelector = fieldType === 'signature' ? 'signatureContainer' : 'initialsContainer';
+      
       // Show the appropriate container
       if (this[containerSelector + 'Target']) {
         this[containerSelector + 'Target'].classList.remove('hidden');
         this[containerSelector + 'Target'].style.display = 'block';
-        console.log(`Container ${containerSelector} displayed`);
       }
       
-      // CRITICAL: Make sure button container is displayed
-      if (this.hasButtonContainerTarget) {
-        this.buttonContainerTargets.forEach(container => {
-          container.style.display = 'flex';
-          console.log("Button container displayed");
-        });
-      }
+      // Check if document signer already has saved preferences
+      this.checkForSavedPreferences(fieldType);
       
-      // Find canvas
-      let canvas = document.getElementById(canvasId);
-      if (!canvas) {
-        console.error(`Canvas not found with ID: ${canvasId}`);
-        // Try to find canvas via target
-        if (this.hasCanvasTarget) {
-          canvas = this.canvasTargets.find(c => c.id === canvasId);
-          console.log("Canvas found via target:", canvas);
-        }
-      }
+      // Initialize the font selection UI
+      this.initFontSelectionUI(fieldType);
       
-      if (!canvas) {
-        console.error("Could not find canvas element");
+      return true;
+    } catch (error) {
+      console.error("Error in open method:", error);
+      return false;
+    }
+  }
+  
+  // Check for saved font preferences
+  async checkForSavedPreferences(fieldType) {
+    try {
+      const fieldSigningController = document.querySelector('[data-controller="field-signing"]')?.__stimulusController;
+      if (!fieldSigningController || !fieldSigningController.documentIdValue || !fieldSigningController.tokenValue) {
+        console.log("Cannot check for saved preferences - missing field signing controller or values");
         return;
       }
       
-      console.log("Using canvas:", canvas.id);
+      const documentId = fieldSigningController.documentIdValue;
+      const token = fieldSigningController.tokenValue;
       
-      // CRITICAL: Ensure canvas is properly styled and sized
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
+      // Fetch the saved preferences
+      const response = await fetch(`/sign/${documentId}/get_font_preference?token=${token}`);
       
-      // Set canvas display dimensions (CSS)
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.position = 'absolute';
-      canvas.style.left = '0';
-      canvas.style.top = '0';
-      canvas.style.zIndex = '1002';
-      
-      // Set pointer events and touch action
-      canvas.style.pointerEvents = 'auto'; // CRITICAL
-      canvas.style.touchAction = 'none';  // CRITICAL for touch devices
-      canvas.style.userSelect = 'none';   // Prevent text selection
-      canvas.style.cursor = 'crosshair';  // Show drawing cursor
-      
-      // Set canvas actual size in pixels
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      
-      console.log(`Canvas sized: ${canvas.width}x${canvas.height} (display: ${rect.width}x${rect.height})`);
-      
-      // Clear canvas to white
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        // Scale context for high DPI displays
-        ctx.scale(dpr, dpr);
-        
-        // Clear to white
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        // Draw a subtle guide line
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.05)";
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(20, rect.height / 2);
-        ctx.lineTo(rect.width - 20, rect.height / 2);
-        ctx.stroke();
-        
-        // Reset styles
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = "#000000";
+      if (!response.ok) {
+        console.log("Failed to fetch font preferences");
+        return;
       }
       
-      // Store canvas reference
-      this.currentCanvas = canvas;
+      const data = await response.json();
+      console.log("Retrieved font preferences:", data);
       
-      // IMMEDIATELY set up drawing handlers - no delays
-      console.log("Setting up direct drawing handlers immediately");
-      this.setupDirectDrawingHandlers(canvas);
+      // Check if we have preferences for this field type
+      if (fieldType === 'signature' && data.signature_font) {
+        this.selectedFontValue = data.signature_font;
+        
+        // Get the name from the input field if it exists
+        const name = document.querySelector('[data-signature-modal-target="nameInput"]')?.value || 
+                    data.name ||
+                    "Your Signature";
+        
+        // Update the preview
+        if (this.hasPreviewCanvasTarget) {
+          this.updatePreview(name, data.signature_font);
+          
+          // Enable the save button
+          if (this.hasSaveSignatureButtonTarget) {
+            this.saveSignatureButtonTarget.disabled = false;
+            this.saveSignatureButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
+          }
+        }
+      } else if (fieldType === 'initials' && data.initials_font) {
+        this.selectedInitialsFontValue = data.initials_font;
+        
+        // Get initials value
+        const initials = document.querySelector('[data-signature-modal-target="initialsInput"]')?.value || 
+                        data.initials ||
+                        "JD";
+        
+        // Update the preview
+        if (this.hasInitialsPreviewCanvasTarget) {
+          this.updateInitialsPreview(initials, data.initials_font);
+          
+          // Enable the save button
+          if (this.hasSaveInitialsButtonTarget) {
+            this.saveInitialsButtonTarget.disabled = false;
+            this.saveInitialsButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
+          }
+        }
+      }
       
-      // Setup button handlers too
-      this.setupButtonHandlers(canvas);
-      
-      // Initialize the save button state (disabled)
-      this.disableSaveButton();
-      
-      // Check canvas content after a delay to update button state
-      setTimeout(() => this.checkCanvasContentAndUpdateButton(canvas), 200);
-      
-      console.log("Modal and canvas initialization complete - should be ready for drawing");
-      
-      // CRITICAL NEW ADDITION: Automatically trigger the testDraw method after a short delay
-      // This uses the known-working test button functionality
-      setTimeout(() => {
-        console.log("Auto-triggering testDraw to ensure drawing is activated");
-        this.testDraw({ target: canvas });
-      }, 100);
-      
-      return canvas;
     } catch (error) {
-      console.error("Error in open method:", error);
+      console.error("Error checking for saved preferences:", error);
+    }
+    
+    // Initialize the font selection UI after checking preferences
+    this.initFontSelectionUI(fieldType);
+  }
+  
+  // Initialize the font selection UI for signatures or initials
+  initFontSelectionUI(fieldType) {
+    console.log(`Setting up font selection UI for ${fieldType}`);
+    console.log('Name input exists:', this.hasNameInputTarget);
+    console.log('Font previews container exists:', this.hasFontPreviewsContainerTarget);
+    
+    // Set up the right input field and preview container based on field type
+    if (fieldType === 'signature') {
+      // Set up for signature
+      if (this.hasNameInputTarget && this.hasFontPreviewsContainerTarget) {
+        // Check DOM elements are available
+        console.log('Signature container element:', this.fontPreviewsContainerTarget);
+        
+        // Create manual previews if needed
+        if (this.fontPreviewsContainerTarget.children.length === 0) {
+          console.log("Creating manual font previews for signature");
+          
+          // Clear container
+          this.fontPreviewsContainerTarget.innerHTML = '';
+          
+          Object.entries(SIGNATURE_FONTS).forEach(([key, font]) => {
+            // Create preview container as a div
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'font-preview-item p-3 border rounded-md cursor-pointer hover:bg-blue-50';
+            previewDiv.setAttribute('data-font-key', key);
+            
+            // Add preview text with font class
+            const textPreview = document.createElement('div');
+            textPreview.className = `font-${key} text-center py-3`;
+            textPreview.style.fontFamily = font.family; // Add direct style to ensure font is applied
+            textPreview.textContent = this.nameInputTarget.value || "John Doe";
+            
+            // Add font name label
+            const fontName = document.createElement('div');
+            fontName.className = 'text-sm text-center mt-2 text-gray-700';
+            fontName.textContent = font.name;
+            
+            // Assemble preview
+            previewDiv.appendChild(textPreview);
+            previewDiv.appendChild(fontName);
+            
+            // Add click handler to select font
+            previewDiv.addEventListener('click', () => {
+              // Set the selected font
+              this.selectedFontValue = key;
+              
+              // Update the preview
+              this.updatePreview(this.nameInputTarget.value || "Your Signature", key);
+              
+              // Highlight this option
+              const items = this.fontPreviewsContainerTarget.querySelectorAll('.font-preview-item');
+              items.forEach(item => item.classList.remove('border-blue-500', 'bg-blue-50'));
+              previewDiv.classList.add('border-blue-500', 'bg-blue-50');
+              
+              // Enable save button
+              if (this.hasSaveSignatureButtonTarget) {
+                this.saveSignatureButtonTarget.disabled = false;
+                this.saveSignatureButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
+              }
+            });
+            
+            // Add to container
+            this.fontPreviewsContainerTarget.appendChild(previewDiv);
+          });
+        }
+        
+        // Add input change handler
+        this.nameInputTarget.addEventListener('input', () => {
+          if (this.selectedFontValue) {
+            this.updatePreview(this.nameInputTarget.value || "Your Signature", this.selectedFontValue);
+          }
+        });
+      } else {
+        console.error("Missing required targets for signature UI");
+      }
+    } else if (fieldType === 'initials') {
+      // Set up for initials
+      if (this.hasInitialsInputTarget && this.hasInitialsFontPreviewsContainerTarget) {
+        // Check DOM elements are available
+        console.log('Initials container element:', this.initialsFontPreviewsContainerTarget);
+        
+        // Create manual previews if needed
+        if (this.initialsFontPreviewsContainerTarget.children.length === 0) {
+          console.log("Creating manual font previews for initials");
+          
+          // Clear container
+          this.initialsFontPreviewsContainerTarget.innerHTML = '';
+          
+          Object.entries(SIGNATURE_FONTS).forEach(([key, font]) => {
+            // Create preview container as a div
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'font-preview-item p-3 border rounded-md cursor-pointer hover:bg-blue-50';
+            previewDiv.setAttribute('data-font-key', key);
+            
+            // Add preview text with font class
+            const textPreview = document.createElement('div');
+            textPreview.className = `font-${key} text-center py-3`;
+            textPreview.style.fontFamily = font.family; // Add direct style to ensure font is applied
+            textPreview.textContent = this.initialsInputTarget.value || "JD";
+            
+            // Add font name label
+            const fontName = document.createElement('div');
+            fontName.className = 'text-sm text-center mt-2 text-gray-700';
+            fontName.textContent = font.name;
+            
+            // Assemble preview
+            previewDiv.appendChild(textPreview);
+            previewDiv.appendChild(fontName);
+            
+            // Add click handler to select font
+            previewDiv.addEventListener('click', () => {
+              // Set the selected font
+              this.selectedInitialsFontValue = key;
+              
+              // Update the preview
+              this.updateInitialsPreview(this.initialsInputTarget.value || "JD", key);
+              
+              // Highlight this option
+              const items = this.initialsFontPreviewsContainerTarget.querySelectorAll('.font-preview-item');
+              items.forEach(item => item.classList.remove('border-blue-500', 'bg-blue-50'));
+              previewDiv.classList.add('border-blue-500', 'bg-blue-50');
+              
+              // Enable save button
+              if (this.hasSaveInitialsButtonTarget) {
+                this.saveInitialsButtonTarget.disabled = false;
+                this.saveInitialsButtonTarget.classList.remove('opacity-50', 'cursor-not-allowed');
+              }
+            });
+            
+            // Add to container
+            this.initialsFontPreviewsContainerTarget.appendChild(previewDiv);
+          });
+        }
+        
+        // Add input change handler
+        this.initialsInputTarget.addEventListener('input', () => {
+          if (this.selectedInitialsFontValue) {
+            this.updateInitialsPreview(this.initialsInputTarget.value || "JD", this.selectedInitialsFontValue);
+          }
+        });
+      } else {
+        console.error("Missing required targets for initials UI");
+      }
+    }
+  }
+  
+  // Update signature preview
+  updatePreview(text, fontKey) {
+    if (!this.hasPreviewCanvasTarget || !fontKey) return;
+    
+    console.log(`Updating preview with text "${text}" and font "${fontKey}"`);
+    
+    // Show the canvas, hide the placeholder
+    this.previewCanvasTarget.classList.remove('hidden');
+    if (this.hasPreviewPlaceholderTarget) {
+      this.previewPlaceholderTarget.classList.add('hidden');
+    }
+    
+    // Set canvas size
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = this.previewCanvasTarget;
+    const container = canvas.parentElement;
+    
+    // Ensure the container has dimensions
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      console.error("Preview container has zero dimensions:", container);
+      return;
+    }
+    
+    console.log(`Canvas container dimensions: ${container.clientWidth}x${container.clientHeight}`);
+    
+    canvas.width = container.clientWidth * dpr;
+    canvas.height = container.clientHeight * dpr;
+    
+    console.log(`Canvas dimensions set to: ${canvas.width}x${canvas.height}`);
+    
+    // Render preview
+    const result = renderTextWithFont(canvas, text, fontKey, {
+      fontSize: Math.min(canvas.height / 2.5, 60) * dpr,
+      x: canvas.width / 2,
+      y: canvas.height / 2
+    });
+    
+    console.log(`Preview render result: ${result ? 'success' : 'failed'}`);
+  }
+  
+  // Update initials preview
+  updateInitialsPreview(text, fontKey) {
+    if (!this.hasInitialsPreviewCanvasTarget || !fontKey) return;
+    
+    console.log(`Updating initials preview with text "${text}" and font "${fontKey}"`);
+    
+    // Show the canvas, hide the placeholder
+    this.initialsPreviewCanvasTarget.classList.remove('hidden');
+    if (this.hasInitialsPreviewPlaceholderTarget) {
+      this.initialsPreviewPlaceholderTarget.classList.add('hidden');
+    }
+    
+    // Set canvas size
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = this.initialsPreviewCanvasTarget;
+    const container = canvas.parentElement;
+    
+    // Ensure the container has dimensions
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      console.error("Initials preview container has zero dimensions:", container);
+      return;
+    }
+    
+    console.log(`Initials canvas container dimensions: ${container.clientWidth}x${container.clientHeight}`);
+    
+    canvas.width = container.clientWidth * dpr;
+    canvas.height = container.clientHeight * dpr;
+    
+    console.log(`Initials canvas dimensions set to: ${canvas.width}x${canvas.height}`);
+    
+    // Render preview
+    const result = renderTextWithFont(canvas, text, fontKey, {
+      fontSize: Math.min(canvas.height / 2.5, 60) * dpr,
+      x: canvas.width / 2,
+      y: canvas.height / 2
+    });
+    
+    console.log(`Initials preview render result: ${result ? 'success' : 'failed'}`);
+  }
+  
+  // Save signature
+  saveSignature(event) {
+    console.log("saveSignature method called", event);
+    
+    if (!this.selectedFontValue || !this.hasNameInputTarget) {
+      console.error("Cannot save signature - missing font or name input", {
+        selectedFont: this.selectedFontValue,
+        hasNameInput: this.hasNameInputTarget
+      });
+      return;
+    }
+    
+    try {
+      const name = this.nameInputTarget.value || "Your Signature";
+      console.log(`Generating signature image for "${name}" with font ${this.selectedFontValue}`);
+      
+      const imageUrl = generateSignatureImageUrl(name, this.selectedFontValue, {
+        width: 400,
+        height: 150
+      });
+      
+      console.log("Generated signature image URL, length:", imageUrl.length);
+      
+      // Get the current field ID from window or data attribute
+      const fieldId = window.currentFieldId || this.currentFieldId;
+      console.log("Using field ID:", fieldId);
+      
+      // Dispatch event with signature data
+      const signatureEvent = new CustomEvent('signature-pad:save', {
+        detail: {
+          signatureData: imageUrl,
+          fontKey: this.selectedFontValue,
+          fieldId: fieldId,
+          fieldType: 'signature'
+        },
+        bubbles: true
+      });
+      
+      // Dispatch on document
+      console.log("Dispatching signature-pad:save event");
+      document.dispatchEvent(signatureEvent);
+      
+      // Try direct method call on field-signing controller
+      const fieldSigningController = document.querySelector('[data-controller="field-signing"]');
+      const controller = fieldSigningController?.__stimulusController;
+      
+      if (controller && typeof controller.signatureComplete === 'function') {
+        console.log("Calling field-signing controller's signatureComplete method directly");
+        controller.signatureComplete({
+          detail: { 
+            signatureData: imageUrl,
+            fontKey: this.selectedFontValue,
+            fieldId: fieldId,
+            fieldType: 'signature'
+          }
+        });
+      } else {
+        console.log("Could not find field-signing controller or signatureComplete method", {
+          controller: !!controller,
+          method: controller ? typeof controller.signatureComplete : 'N/A'
+        });
+        
+        // Always use the fallback to update UI directly
+        if (fieldId) {
+          console.log("Using direct DOM fallback for field", fieldId);
+          const fieldElement = document.querySelector(`[data-field-id="${fieldId}"]`);
+          if (fieldElement) {
+            // Create image to display signature
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.className = 'w-full h-full object-contain p-1';
+            
+            // Clear field content and add image
+            fieldElement.innerHTML = '';
+            fieldElement.appendChild(img);
+            
+            // Mark as completed
+            fieldElement.dataset.completed = 'true';
+            fieldElement.style.border = '2px solid #4CAF50';
+            fieldElement.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
+            
+            // Also update field status in sidebar if it exists
+            const statusItem = document.querySelector(`.field-status-item[data-field-id="${fieldId}"]`);
+            if (statusItem) {
+              statusItem.dataset.fieldStatus = 'completed';
+              const statusCircle = statusItem.querySelector('.field-status');
+              if (statusCircle) {
+                statusCircle.classList.remove('bg-gray-300');
+                statusCircle.classList.add('bg-green-500');
+              }
+            }
+          } else {
+            console.warn(`Field element with ID ${fieldId} not found`);
+          }
+        } else {
+          console.warn("No field ID available for direct DOM update");
+        }
+      }
+      
+      // Store in session storage as additional fallback
+      sessionStorage.setItem('last_signature_data', imageUrl);
+      sessionStorage.setItem('last_signature_field_id', fieldId || '');
+      
+      // Close the modal
+      console.log("Closing signature modal");
+      this.close();
+    } catch (error) {
+      console.error("Error saving signature:", error);
+    }
+  }
+  
+  // Save initials
+  saveInitials(event) {
+    console.log("saveInitials method called", event);
+    
+    if (!this.selectedInitialsFontValue || !this.hasInitialsInputTarget) {
+      console.error("Cannot save initials - missing font or initials input", {
+        selectedFont: this.selectedInitialsFontValue,
+        hasInitialsInput: this.hasInitialsInputTarget
+      });
+      return;
+    }
+    
+    try {
+      const initials = this.initialsInputTarget.value || "JD";
+      console.log(`Generating initials image for "${initials}" with font ${this.selectedInitialsFontValue}`);
+      
+      const imageUrl = generateSignatureImageUrl(initials, this.selectedInitialsFontValue, {
+        width: 200,
+        height: 100
+      });
+      
+      console.log("Generated initials image URL, length:", imageUrl.length);
+      
+      // Get the current field ID from window or data attribute
+      const fieldId = window.currentFieldId || this.currentFieldId;
+      console.log("Using field ID for initials:", fieldId);
+      
+      // Dispatch event with initials data
+      const initialsEvent = new CustomEvent('signature-pad:save', {
+        detail: {
+          signatureData: imageUrl,
+          fontKey: this.selectedInitialsFontValue,
+          fieldId: fieldId,
+          fieldType: 'initials'
+        },
+        bubbles: true
+      });
+      
+      // Dispatch on document
+      console.log("Dispatching signature-pad:save event for initials");
+      document.dispatchEvent(initialsEvent);
+      
+      // Try direct method call on field-signing controller
+      const fieldSigningController = document.querySelector('[data-controller="field-signing"]');
+      const controller = fieldSigningController?.__stimulusController;
+      
+      if (controller && typeof controller.signatureComplete === 'function') {
+        console.log("Calling field-signing controller's signatureComplete method directly for initials");
+        controller.signatureComplete({
+          detail: { 
+            signatureData: imageUrl,
+            fontKey: this.selectedInitialsFontValue,
+            fieldId: fieldId,
+            fieldType: 'initials'
+          }
+        });
+      } else {
+        console.log("Could not find field-signing controller or signatureComplete method", {
+          controller: !!controller,
+          method: controller ? typeof controller.signatureComplete : 'N/A'
+        });
+        
+        // Always use the fallback to update UI directly
+        if (fieldId) {
+          console.log("Using direct DOM fallback for initials field", fieldId);
+          const fieldElement = document.querySelector(`[data-field-id="${fieldId}"]`);
+          if (fieldElement) {
+            // Create image to display initials
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.className = 'w-full h-full object-contain p-1';
+            
+            // Clear field content and add image
+            fieldElement.innerHTML = '';
+            fieldElement.appendChild(img);
+            
+            // Mark as completed
+            fieldElement.dataset.completed = 'true';
+            fieldElement.classList.remove('border-dashed');
+            fieldElement.classList.add('border-solid');
+            fieldElement.classList.add('bg-green-50');
+            fieldElement.classList.add('border-green-500');
+            
+            // Also update field status in sidebar if it exists
+            const statusItem = document.querySelector(`.field-status-item[data-field-id="${fieldId}"]`);
+            if (statusItem) {
+              statusItem.dataset.fieldStatus = 'completed';
+              const statusCircle = statusItem.querySelector('.field-status');
+              if (statusCircle) {
+                statusCircle.classList.remove('bg-gray-300');
+                statusCircle.classList.add('bg-green-500');
+              }
+            }
+          } else {
+            console.warn(`Field element with ID ${fieldId} not found`);
+          }
+        } else {
+          console.warn("No field ID available for direct DOM update");
+        }
+      }
+      
+      // Store in session storage as additional fallback
+      sessionStorage.setItem('last_initials_data', imageUrl);
+      sessionStorage.setItem('last_initials_field_id', fieldId || '');
+      
+      // Close the modal
+      console.log("Closing signature modal after initials save");
+      this.close();
+    } catch (error) {
+      console.error("Error saving initials:", error);
     }
   }
   
@@ -621,10 +1189,7 @@ export default class extends Controller {
     
     // Drawing function
     const draw = (event) => {
-      if (!drawingState.isDrawing) {
-        console.log("Not drawing - ignoring move event", event.type);
-        return;
-      }
+      if (!drawingState.isDrawing) return;
       
       // Prevent default browser behavior
       event.preventDefault();
@@ -880,26 +1445,14 @@ export default class extends Controller {
     // Hide modal
     if (this.hasBackdropTarget) {
       this.backdropTarget.classList.add('hidden');
-      this.backdropTarget.style.display = 'none';
     }
     
     if (this.hasModalTarget) {
       this.modalTarget.classList.add('hidden');
-      this.modalTarget.style.display = 'none';
     }
-    
-    // Ensure body is visible
-    document.body.style.removeProperty('overflow');
-    document.body.style.display = 'block';
     
     // Resume PDF rendering
     document.dispatchEvent(new CustomEvent('pdf-viewer:unpause'));
-    
-    // Force redraw to prevent black screen
-    setTimeout(() => {
-      document.body.style.opacity = 0.99;
-      setTimeout(() => document.body.style.opacity = 1, 10);
-    }, 10);
   }
   
   // Helper method to enable the save button
@@ -1083,10 +1636,16 @@ export default class extends Controller {
   }
   
   setupButtonHandlers(canvas) {
-    console.log("Setting up button handlers for canvas:", canvas.id);
+    // Safety check to avoid errors
+    if (!canvas) {
+      console.log("No canvas provided to setupButtonHandlers");
+      return;
+    }
+    
+    console.log("Setting up button handlers for canvas");
     
     // Find the parent content container
-    const contentContainer = canvas.closest('.modal-content');
+    const contentContainer = canvas?.closest('.modal-content');
     if (!contentContainer) {
       console.error("Could not find parent content container for button handlers");
       return;

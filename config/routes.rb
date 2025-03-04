@@ -13,6 +13,8 @@ Rails.application.routes.draw do
   get "sign/:id/:token", to: "public_signing#show", as: "public_sign_document"
   post "sign/:id", to: "public_signing#sign_complete", as: "public_sign_complete"
   post "sign/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+  get "sign/:id/get_font_preference", to: "public_signing#get_font_preference", as: "public_sign_get_font_preference"
+  post "sign/:id/save_font_preference", to: "public_signing#save_font_preference", as: "public_sign_save_font_preference"
 
   resources :documents do
     member do

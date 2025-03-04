@@ -478,21 +478,16 @@ export default class extends Controller {
     this.currentFieldValue = fieldId;
     window.currentFieldId = fieldId; // Also store in global var for fallback methods
     
+    // Check if document signer already has a saved font preference
+    // First, determine which document signer we're working with
+    const signerId = this.signerIdValue;
+    
     // Try multiple approaches to open the modal
     
     // Approach 1: Use the global function if available
     if (typeof window.openSigningModal === 'function') {
       console.log("Using global openSigningModal function");
       window.openSigningModal(fieldType, fieldId);
-      
-      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
-      setTimeout(() => {
-        if (typeof window.activateDrawingOnCurrentCanvas === 'function') {
-          console.log("Activating drawing using global helper");
-          window.activateDrawingOnCurrentCanvas();
-        }
-      }, 500);
-      
       return;
     }
     
@@ -500,16 +495,7 @@ export default class extends Controller {
     const modalController = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
     if (modalController && typeof modalController.open === 'function') {
       console.log("Using signature-modal controller to open modal");
-      modalController.open(event);
-      
-      // Use setTimeout to ensure the modal is fully open before trying to activate drawing
-      setTimeout(() => {
-        console.log("Trying to activate drawing after modal open");
-        if (modalController && typeof modalController.testDraw === 'function') {
-          modalController.testDraw(event);
-        }
-      }, 500);
-      
+      modalController.open(fieldType, fieldId);
       return;
     }
     
@@ -524,55 +510,24 @@ export default class extends Controller {
     
     // Show the modal
     modal.classList.remove('hidden');
-    modal.style.display = 'flex';
+    modal.classList.add('flex');
     
     // Show the appropriate content
     const containers = modal.querySelectorAll('.modal-content');
     containers.forEach(container => {
       container.classList.add('hidden');
-      container.style.display = 'none';
     });
     
     const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
     if (targetContent) {
       targetContent.classList.remove('hidden');
-      targetContent.style.display = 'block';
     }
     
     // Show backdrop
     const backdrop = document.querySelector('[data-signature-modal-target="backdrop"]');
     if (backdrop) {
       backdrop.classList.remove('hidden');
-      backdrop.style.display = 'block';
     }
-    
-    // Make sure button containers are visible
-    const buttonContainers = modal.querySelectorAll('[data-signature-modal-target="buttonContainer"]');
-    buttonContainers.forEach(container => {
-      container.style.display = 'flex';
-    });
-    
-    // Try to trigger the test draw function after a delay
-    setTimeout(() => {
-      console.log("Attempting to trigger test draw after manual modal open");
-      
-      // Find the canvas
-      const canvasId = fieldType === 'signature' ? 'signatureCanvas' : 'initialsCanvas';
-      const canvas = document.getElementById(canvasId);
-      
-      if (canvas) {
-        console.log("Found canvas, triggering test draw");
-        
-        // SIMPLIFIED FIX: Just click the test button directly
-        const testButton = document.querySelector(`button[data-action="click->signature-modal#testDraw"][data-field-id="${canvasId}"]`);
-        if (testButton) {
-          console.log("Found test button, clicking it directly");
-          testButton.click();
-        } else {
-          console.log("Could not find test button");
-        }
-      }
-    }, 500);
   }
   
   closeModal() {
@@ -594,13 +549,12 @@ export default class extends Controller {
       const modal = document.querySelector('[data-controller="signature-modal"]');
       if (modal) {
         modal.classList.add('hidden');
-        modal.style.display = 'none';
+        modal.classList.remove('flex');
         
         // Hide the backdrop
         const backdrop = document.getElementById('modalBackdrop');
         if (backdrop) {
           backdrop.classList.add('hidden');
-          backdrop.style.display = 'none';
         }
       } else {
         console.error("No modal element found for closing!");
@@ -637,9 +591,16 @@ export default class extends Controller {
   signatureComplete(event) {
     console.log("Signature complete event received", event);
     
-    // Try to get signature data from event or session storage
+    // Try to get signature data from event
     let signatureData = event.detail?.signatureData;
     const fieldId = this.currentFieldValue || window.currentFieldId;
+    const fontKey = event.detail?.fontKey;
+    const fieldType = event.detail?.fieldType || 
+                      (fieldId && this.fieldTargets.find(f => 
+                        f.dataset.fieldId === fieldId || 
+                        f.dataset.fieldId === `field-${fieldId}`)?.dataset.fieldType);
+    
+    console.log("Field signing controller found for field ID:", fieldId);
     
     // Check if we need to use session storage as fallback
     if (!signatureData && sessionStorage.getItem('last_signature_data')) {
@@ -656,7 +617,7 @@ export default class extends Controller {
       return;
     }
     
-    console.log(`Saving signature for field: ${fieldId}`);
+    console.log(`Saving ${fieldType} for field: ${fieldId} with font: ${fontKey}`);
     
     // Find the corresponding field - note we need to handle both with/without the "field-" prefix
     let field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
@@ -665,19 +626,62 @@ export default class extends Controller {
     }
     
     if (!field) {
-      console.error(`Field not found with ID: ${fieldId}`);
-      return;
+      console.error(`Field not found with ID: ${fieldId}. Available fields:`, 
+        this.fieldTargets.map(f => f.dataset.fieldId).join(', '));
+      
+      // Try a more generic approach by finding any field with the right type
+      const fields = this.fieldTargets.filter(f => f.dataset.fieldType === fieldType && !f.dataset.completed);
+      if (fields.length > 0) {
+        console.log(`Found ${fields.length} ${fieldType} fields that aren't completed yet. Using the first one.`);
+        field = fields[0];
+      } else {
+        console.error(`No ${fieldType} fields found that aren't completed yet.`);
+        return;
+      }
     }
     
     // Update the field with the signature
-    const processedFieldId = fieldId.replace(/^field-/, '');
+    const processedFieldId = field.dataset.fieldId.replace(/^field-/, '');
     this.updateField(processedFieldId, signatureData);
+    
+    // Save font preference to the server
+    if (fontKey) {
+      this.saveFontPreference(fieldType, fontKey);
+    }
     
     // Close the modal
     this.closeModal();
     
     // Update progress bar and field statuses
     this.updateFieldStatuses();
+  }
+  
+  // Save font preference for current signer
+  async saveFontPreference(fieldType, fontKey) {
+    if (!this.signerIdValue) return;
+    
+    try {
+      const url = `/sign/${this.documentIdValue}/save_font_preference?token=${this.tokenValue}`;
+      const fontField = fieldType === 'signature' ? 'signature_font' : 'initials_font';
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({ [fontField]: fontKey })
+      });
+      
+      if (!response.ok) {
+        console.error(`Failed to save font preference: ${response.status}`);
+        return;
+      }
+      
+      console.log(`Successfully saved ${fieldType} font preference: ${fontKey}`);
+    } catch (error) {
+      console.error("Error saving font preference:", error);
+    }
   }
   
   textComplete(event) {

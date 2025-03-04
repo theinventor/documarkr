@@ -2,20 +2,22 @@
 #
 # Table name: document_signers
 #
-#  id          :integer          not null, primary key
-#  email       :string
-#  ip_address  :string
-#  name        :string
-#  sign_order  :integer          default(0)
-#  signed_at   :datetime
-#  status      :integer          not null
-#  token       :string
-#  user_agent  :string
-#  viewed_at   :datetime
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  document_id :integer          not null
-#  user_id     :integer
+#  id             :integer          not null, primary key
+#  email          :string
+#  initials_font  :string
+#  ip_address     :string
+#  name           :string
+#  sign_order     :integer          default(0)
+#  signature_font :string
+#  signed_at      :datetime
+#  status         :integer          not null
+#  token          :string
+#  user_agent     :string
+#  viewed_at      :datetime
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  document_id    :integer          not null
+#  user_id        :integer
 #
 # Indexes
 #
@@ -36,6 +38,11 @@ class DocumentSigner < ApplicationRecord
   validates :name, presence: true
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :sign_order, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  
+  # Signature font validation with available options
+  SIGNATURE_FONTS = ["handwriting1", "handwriting2", "handwriting3"].freeze
+  validates :signature_font, inclusion: { in: SIGNATURE_FONTS, allow_nil: true }
+  validates :initials_font, inclusion: { in: SIGNATURE_FONTS, allow_nil: true }
 
   before_create :generate_token
 

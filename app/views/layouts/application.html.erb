@@ -15,6 +15,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&family=Outfit:wght@400;500;600&family=Source+Serif+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cedarville+Cursive&family=Dancing+Script:wght@500&family=Shadows+Into+Light&display=swap" rel="stylesheet">
+    
+    <style>
+      .font-handwriting1 { font-family: 'Cedarville Cursive', cursive; }
+      .font-handwriting2 { font-family: 'Dancing Script', cursive; }
+      .font-handwriting3 { font-family: 'Shadows Into Light', cursive; }
+    </style>
     
     <%# Use the Rails integrated Tailwind CSS %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
@@ -33,6 +40,16 @@
       }
       .primary-bg {
         background-color: #4f46e5;
+      }
+      /* Font classes for signature fonts */
+      .font-handwriting1 {
+        font-family: 'Cedarville Cursive', cursive;
+      }
+      .font-handwriting2 {
+        font-family: 'Dancing Script', cursive;
+      }
+      .font-handwriting3 {
+        font-family: 'Shadows Into Light', cursive;
       }
     </style>
   </head>
