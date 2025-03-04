@@ -73,7 +73,7 @@ Rails.application.configure do
     authentication: :plain,
     user_name: Rails.application.credentials.dig(:postmark, :api_token),
     password: Rails.application.credentials.dig(:postmark, :api_token),
-    domain: ENV.fetch("EMAIL_DOMAIN", "documarkr.com"),
+    domain: ENV.fetch("APPLICATION_HOST", "documarkr.com"),
     enable_starttls_auto: true
   }
 
