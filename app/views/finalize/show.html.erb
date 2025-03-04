@@ -53,9 +53,9 @@
       
       <div 
         data-finalize-target="container"
-        class="relative">
-        <div data-finalize-target="pageContainer" class="pdf-page-container">
-          <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px]">
+        class="relative w-[800px] mx-auto">
+        <div data-finalize-target="pageContainer" class="pdf-page-container w-full">
+          <div data-pdf-viewer-target="container" class="pdf-container bg-white border border-gray-200 rounded-lg p-4 min-h-[400px] w-full">
             <!-- PDF will be rendered here -->
           </div>
         </div>
@@ -73,7 +73,7 @@
                 data-field-id="field-<%= field.id %>"
                 data-signer-name="<%= field.document_signer.name %>"
                 data-signer-id="<%= field.document_signer_id %>"
-                class="form-field-container completed <%= field.field_type %>-field positioned-field">
+                class="form-field-container completed <%= field.field_type %>-field positioned-field absolute">
                 <% case field.field_type %>
                 <% when 'signature' %>
                   <% if field.value.present? %>

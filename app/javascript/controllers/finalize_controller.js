@@ -63,17 +63,17 @@ export default class extends Controller {
     // Get field position data
     const xPos = parseFloat(field.dataset.xPosition);
     const yPos = parseFloat(field.dataset.yPosition);
+    const width = parseFloat(field.dataset.width);
+    const height = parseFloat(field.dataset.height);
     
     // Get the page container's dimensions
     const pageRect = pageContainer.getBoundingClientRect();
     
-    // Calculate absolute position
-    const absoluteX = pageRect.left + (xPos / 100) * pageRect.width;
-    const absoluteY = pageRect.top + (yPos / 100) * pageRect.height;
-    
-    // Apply position (add to any transform for scaling)
-    field.style.left = `${absoluteX}px`;
-    field.style.top = `${absoluteY}px`;
+    // Position based on percentages of the fixed container width/height
+    field.style.left = `${xPos}%`;
+    field.style.top = `${yPos}%`;
+    field.style.width = `${width}%`;
+    field.style.height = `${height}%`;
   }
   
   // Setup click handlers for all fields

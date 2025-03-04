@@ -15,5 +15,21 @@
 .positioned-field {
   position: absolute;
   z-index: 20;
+  /* Prevent fields from being affected by container resizing */
+  transform-origin: top left;
+  pointer-events: auto;
   /* Add other styles as needed */
+}
+
+/* Ensure the PDF container maintains its aspect ratio and fixed size */
+.pdf-page-container {
+  position: relative;
+  width: 100%;
+}
+
+/* Style for the container of both PDF and fields */
+[data-finalize-target="container"] {
+  position: relative;
+  /* Fixed width set in HTML */
+  margin: 0 auto;
 }
