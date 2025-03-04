@@ -4,7 +4,7 @@ Documarkr is an open-source document signing platform similar to DocuSign, but w
 
 This was built 100% with AI, no human wrote a single line of code.
 
-STATUS: This app is mostly working for the happy path. The finalized PDF isn't currently looking super beautiful, but a few more hours with Claude and it can be. Might take a moment to get production email working, I only had it going in development so far. 
+STATUS: This app is working in production. You can upload docs, add fields, send them off for signatures, emails work, etc. 
 
 ## Features
 
