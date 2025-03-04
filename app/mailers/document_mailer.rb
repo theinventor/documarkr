@@ -1,6 +1,4 @@
 class DocumentMailer < ApplicationMailer
-  default from: "notifications@documarkr.com"
-
   def signing_request(document, document_signer)
     @document = document
     @document_signer = document_signer
