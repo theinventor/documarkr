@@ -215,6 +215,12 @@ export default class extends Controller {
       this.debugFieldStatus();
       console.log("===========================");
     }, 2500);
+
+    // Track current page
+    this.currentPage = 1;
+    
+    // Add local storage for saving last signature
+    this.lastSignature = localStorage.getItem('lastSignature') || null;
   }
   
   disconnect() {
@@ -478,6 +484,22 @@ export default class extends Controller {
     this.currentFieldValue = fieldId;
     window.currentFieldId = fieldId; // Also store in global var for fallback methods
     
+    // Check if we have a previously saved signature to reuse
+    const lastSignature = localStorage.getItem('lastSignature');
+    if (lastSignature) {
+      console.log("Found previously saved signature, applying automatically");
+      
+      // Apply the signature to this field without opening modal
+      const processedFieldId = fieldId.replace(/^field-/, '');
+      this.updateField(processedFieldId, lastSignature);
+      
+      // No need to open the modal
+      return;
+    }
+    
+    // If no previous signature, proceed with opening the modal
+    console.log("No previous signature found, opening signature modal");
+    
     // Try multiple approaches to open the modal
     
     // Approach 1: Use the global function if available
@@ -635,28 +657,52 @@ export default class extends Controller {
   }
   
   signatureComplete(event) {
-    console.log("Signature complete event received", event);
+    console.log("Got signature complete event");
     
-    // Try to get signature data from event or session storage
-    let signatureData = event.detail?.signatureData;
-    const fieldId = this.currentFieldValue || window.currentFieldId;
+    // Try to get the signature data and field id from the event
+    let signatureData = event.detail ? event.detail.signatureData : null;
+    let fieldId = event.detail ? event.detail.fieldId : null;
     
-    // Check if we need to use session storage as fallback
-    if (!signatureData && sessionStorage.getItem('last_signature_data')) {
-      console.log("Using signature data from session storage");
-      signatureData = sessionStorage.getItem('last_signature_data');
-      
-      // Clear session storage to prevent reuse
-      sessionStorage.removeItem('last_signature_data');
-      sessionStorage.removeItem('last_signature_field_id');
+    // Fallback to session storage for the signature data
+    if (!signatureData && typeof sessionStorage !== 'undefined') {
+      try {
+        console.log("No signature in event, trying sessionStorage");
+        signatureData = sessionStorage.getItem('signatureData');
+        console.log("Using signature from sessionStorage:", !!signatureData);
+        
+        // Clear the session storage to prevent re-use
+        sessionStorage.removeItem('signatureData');
+      } catch (e) {
+        console.error("Error accessing sessionStorage:", e);
+      }
     }
     
+    // Save the signature to localStorage for reuse
+    if (signatureData) {
+      try {
+        localStorage.setItem('lastSignature', signatureData);
+        console.log("Saved signature to localStorage for future use");
+      } catch (e) {
+        console.error("Error saving signature to localStorage:", e);
+      }
+    }
+    
+    // Fallback to global var for field id
+    if (!fieldId && typeof window.currentFieldId !== 'undefined') {
+      console.log("No field ID in event, using global currentFieldId");
+      fieldId = window.currentFieldId;
+    }
+    
+    // Check if we have both the signature data and field ID
     if (!signatureData || !fieldId) {
-      console.error("Missing signature data or field ID", { signatureData: !!signatureData, fieldId });
+      console.error("Missing signature data or field ID", {
+        signatureData: !!signatureData,
+        fieldId
+      });
       return;
     }
     
-    console.log(`Saving signature for field: ${fieldId}`);
+    console.log("Saving signature for field ID:", fieldId);
     
     // Find the corresponding field - note we need to handle both with/without the "field-" prefix
     let field = this.fieldTargets.find(f => f.dataset.fieldId === fieldId);
