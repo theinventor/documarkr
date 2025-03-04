@@ -9,6 +9,9 @@ eagerLoadControllersFrom("controllers", application)
 import FinalizeController from "./finalize_controller"
 application.register("finalize", FinalizeController)
 
+import SignatureModalController from "./signature_modal_controller"
+application.register("signature-modal", SignatureModalController)
+
 // Lazy load controllers as they appear in the DOM (remember not to preload controllers in import map!)
 // import { lazyLoadControllersFrom } from "@hotwired/stimulus-loading"
 // lazyLoadControllersFrom("controllers", application)

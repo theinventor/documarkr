@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { createFontPreviews, generateSignatureImageUrl } from "../utils/font_utils.js"
 
 // Connects to data-controller="field-signing"
 export default class extends Controller {
@@ -10,7 +11,9 @@ export default class extends Controller {
     token: String,
     page: { type: Number, default: 1 },
     currentField: { type: String, default: "" },
-    completeRedirectUrl: String
+    completeRedirectUrl: String,
+    signatureFont: { type: String, default: null },
+    initialsFont: { type: String, default: null }
   }
   
   connect() {
@@ -179,16 +182,48 @@ export default class extends Controller {
       if (img) {
         field.dataset.completed = 'true';
       }
+      
+      // Store signature preferences if this is a signature field
+      if (field.dataset.fieldType === 'signature' || field.dataset.fieldType === 'initials') {
+        this.checkForExistingSignature(field);
+      }
     });
     
     // Check if all signatures are complete and update progress
     this.updateFieldStatuses();
     
-    // Add a failsafe for field positioning
+    // Add a failsafe for field positioning - try multiple times with increasing delays
+    // to ensure PDF is fully loaded and rendered
     setTimeout(() => {
-      console.log("Running field positioning failsafe");
+      console.log("Running field positioning - first attempt");
       this.updateFieldPositions();
-    }, 2000);
+      
+      // Try again after 1 second
+      setTimeout(() => {
+        console.log("Running field positioning - second attempt");
+        this.updateFieldPositions();
+        
+        // Try one more time after 3 seconds
+        setTimeout(() => {
+          console.log("Running field positioning - final attempt");
+          this.updateFieldPositions();
+        }, 3000);
+      }, 1000);
+    }, 500);
+    
+    // Listen for PDF loaded events from the PDF viewer controller
+    document.addEventListener('pdf:loaded', () => {
+      console.log("PDF loaded event received, updating field positions");
+      // Wait a moment for the PDF to be fully rendered
+      setTimeout(() => this.updateFieldPositions(), 200);
+    });
+    
+    // Listen for page change events from the PDF viewer controller
+    document.addEventListener('pdf:pagechanged', () => {
+      console.log("PDF page changed event received, updating field positions");
+      // Wait a moment for the new page to be fully rendered
+      setTimeout(() => this.updateFieldPositions(), 200);
+    });
     
     // Add submit button if not already present
     this.addSubmitButton();
@@ -198,6 +233,9 @@ export default class extends Controller {
     
     // Make sure every field has the right click action
     this.setupFieldClickHandlers();
+    
+    // Listen for signature complete events
+    document.addEventListener('signature:complete', this.signatureComplete.bind(this));
 
     // Initialize progress bar and field list
     this.updateProgressBar();
@@ -290,10 +328,6 @@ export default class extends Controller {
     console.log("Setting up field position styles");
     
     this.fieldTargets.forEach((field, index) => {
-      const xPos = field.dataset.xPosition;
-      const yPos = field.dataset.yPosition;
-      const width = field.dataset.width;
-      const height = field.dataset.height;
       const fieldType = field.dataset.fieldType;
       const isCompleted = field.dataset.completed === "true";
       const pageNumber = parseInt(field.dataset.page, 10);
@@ -301,34 +335,14 @@ export default class extends Controller {
       // Store the page number for later use
       field.setAttribute('data-page-number', pageNumber);
       
-      // Apply initial positioning directly to elements
+      // Set initial styles but don't position yet - that will be done by updateFieldPositions
       field.style.position = 'absolute';
-      field.style.left = `${xPos}%`;
-      field.style.top = `${yPos}%`;
-      
-      // Make fields larger for better visibility - increase size by 20%
-      const scaleFactor = 1.5; // Increase size by 50%
-      field.style.width = `${width * scaleFactor}px`;
-      field.style.height = `${height * scaleFactor}px`;
-      field.style.transform = 'translate(-50%, -50%)';
       field.style.cursor = 'pointer';
       field.style.border = isCompleted ? '2px solid #4CAF50' : '2px dashed #2563EB';
       field.style.borderRadius = '4px';
       
       // Make field backgrounds more visible
       field.style.backgroundColor = isCompleted ? 'rgba(220, 252, 231, 0.7)' : 'rgba(239, 246, 255, 0.7)';
-      
-      // Ensure minimum sizes for better interaction
-      const minWidth = 100; // Minimum width in pixels
-      const minHeight = 40; // Minimum height in pixels
-      
-      if (parseFloat(width) * scaleFactor < minWidth) {
-        field.style.width = `${minWidth}px`;
-      }
-      
-      if (parseFloat(height) * scaleFactor < minHeight) {
-        field.style.height = `${minHeight}px`;
-      }
       
       // Add a class to identify the page this field belongs to
       field.classList.add(`page-${pageNumber}-field`);
@@ -338,10 +352,16 @@ export default class extends Controller {
         this.setupTextField(field);
       }
       
-      // If fieldType is date and not completed, setup date field
+      // If fieldType is date and not completed, set up date picker
       if (fieldType === 'date' && !isCompleted) {
         this.setupDateField(field);
       }
+      
+      // Make sure the field is visible
+      field.style.zIndex = '100';
+      
+      // Set up click handler
+      field.setAttribute('data-action', 'click->field-signing#handleFieldClick');
     });
   }
   
@@ -418,49 +438,111 @@ export default class extends Controller {
     }, 100);
   }
   
-  // Handle direct field click
+  // Handle field click based on field type and completion status
   handleFieldClick(event) {
-    console.log("Field clicked:", event.currentTarget.dataset.fieldId, "Type:", event.currentTarget.dataset.fieldType);
+    event.preventDefault();
     
     const field = event.currentTarget;
     const fieldType = field.dataset.fieldType;
+    const fieldId = field.dataset.fieldId;
+    const isCompleted = field.dataset.completed === 'true';
     
-    // For text fields, don't open modal, just focus the input
-    if (fieldType === 'text') {
-      const input = field.querySelector('input');
-      if (input) {
-        input.focus();
-        event.stopPropagation();
-        return;
-      }
-    }
+    console.log(`Field clicked: ${fieldType} (${fieldId}), completed: ${isCompleted}`);
     
-    // For date fields, open date picker directly in the field
-    if (fieldType === 'date') {
-      const input = field.querySelector('input');
-      if (input) {
-        input.focus();
-        input.click(); // Trigger the date picker
-        event.stopPropagation();
-        return;
-      } else {
-        // If no input exists, create one
-        this.setupDateField(field);
-        const input = field.querySelector('input');
-        if (input) {
-          input.focus();
-          input.click();
-          event.stopPropagation();
-          return;
-        }
-      }
-    }
-    
-    // For signature and initials, open the modal with our updated method
-    if (fieldType === 'signature' || fieldType === 'initials') {
-      this.openSignatureModal(event);
-      event.stopPropagation();
+    // If the field is already completed, don't do anything for now
+    // Later we might want to allow editing
+    if (isCompleted) {
+      console.log("Field is already completed, ignoring click");
       return;
+    }
+    
+    // Handle different field types
+    switch (fieldType) {
+      case 'signature':
+        // Check if we already have a signature font preference
+        if (this.signatureFontValue) {
+          // We have a saved signature font, use it directly
+          console.log("Using saved signature font:", this.signatureFontValue);
+          
+          try {
+            // Get the signer name from the page if available
+            const name = document.getElementById('signer_name')?.value || 'Your Signature';
+            
+            // Import the function dynamically if needed
+            if (typeof generateSignatureImageUrl !== 'function') {
+              console.log("generateSignatureImageUrl not available, using fallback");
+              this.openSignatureModal(event);
+              return;
+            }
+            
+            // Generate the signature image
+            const signatureData = generateSignatureImageUrl(name, this.signatureFontValue);
+            
+            // Update the field with the signature
+            this.updateField(fieldId.replace(/^field-/, ''), signatureData);
+            field.dataset.completed = 'true';
+            this.updateFieldStatuses();
+          } catch (error) {
+            console.error("Error applying saved signature:", error);
+            // Fall back to opening the modal
+            this.openSignatureModal(event);
+          }
+        } else {
+          // No saved signature, open the modal
+          this.openSignatureModal(event);
+        }
+        break;
+        
+      case 'initials':
+        // Check if we already have an initials font preference
+        if (this.initialsFontValue) {
+          // We have a saved initials font, use it directly
+          console.log("Using saved initials font:", this.initialsFontValue);
+          
+          try {
+            // Get the signer name from the page if available, or use initials
+            const fullName = document.getElementById('signer_name')?.value || '';
+            // Extract initials from the name or use default
+            const initials = fullName.split(' ').map(part => part[0]).join('') || 'YS';
+            
+            // Import the function dynamically if needed
+            if (typeof generateSignatureImageUrl !== 'function') {
+              console.log("generateSignatureImageUrl not available, using fallback");
+              this.openSignatureModal(event);
+              return;
+            }
+            
+            // Generate the initials image
+            const initialsData = generateSignatureImageUrl(initials, this.initialsFontValue, { 
+              width: 100, 
+              height: 60 
+            });
+            
+            // Update the field with the initials
+            this.updateField(fieldId.replace(/^field-/, ''), initialsData);
+            field.dataset.completed = 'true';
+            this.updateFieldStatuses();
+          } catch (error) {
+            console.error("Error applying saved initials:", error);
+            // Fall back to opening the modal
+            this.openSignatureModal(event);
+          }
+        } else {
+          // No saved initials, open the modal
+          this.openSignatureModal(event);
+        }
+        break;
+        
+      case 'text':
+        this.setupTextField(field);
+        break;
+        
+      case 'date':
+        this.setupDateField(field);
+        break;
+        
+      default:
+        console.warn(`Unknown field type: ${fieldType}`);
     }
   }
   
@@ -478,20 +560,9 @@ export default class extends Controller {
     this.currentFieldValue = fieldId;
     window.currentFieldId = fieldId; // Also store in global var for fallback methods
     
-    // Check if document signer already has a saved font preference
-    // First, determine which document signer we're working with
-    const signerId = this.signerIdValue;
-    
     // Try multiple approaches to open the modal
     
-    // Approach 1: Use the global function if available
-    if (typeof window.openSigningModal === 'function') {
-      console.log("Using global openSigningModal function");
-      window.openSigningModal(fieldType, fieldId);
-      return;
-    }
-    
-    // Approach 2: Try to use the controller directly
+    // Approach 1: Use the signature-modal controller directly
     const modalController = document.querySelector('[data-controller="signature-modal"]')?.__stimulusController;
     if (modalController && typeof modalController.open === 'function') {
       console.log("Using signature-modal controller to open modal");
@@ -499,7 +570,7 @@ export default class extends Controller {
       return;
     }
     
-    // Approach 3: Fall back to direct DOM manipulation
+    // Approach 2: Fall back to direct DOM manipulation
     console.log("Using direct DOM manipulation to open modal");
     
     const modal = document.querySelector('[data-controller="signature-modal"]');
@@ -521,6 +592,15 @@ export default class extends Controller {
     const targetContent = modal.querySelector(`.modal-content[data-field-type="${fieldType}"]`);
     if (targetContent) {
       targetContent.classList.remove('hidden');
+    }
+    
+    // Initialize font previews
+    const fontPreviewsContainer = modal.querySelector('[data-signature-modal-target="fontPreviewsContainer"]');
+    const nameInput = modal.querySelector('[data-signature-modal-target="nameInput"]');
+    
+    if (fontPreviewsContainer) {
+      const name = nameInput?.value || 'Your Signature';
+      createFontPreviews(fontPreviewsContainer, name);
     }
     
     // Show backdrop
@@ -552,7 +632,7 @@ export default class extends Controller {
         modal.classList.remove('flex');
         
         // Hide the backdrop
-        const backdrop = document.getElementById('modalBackdrop');
+        const backdrop = document.querySelector('[data-signature-modal-target="backdrop"]');
         if (backdrop) {
           backdrop.classList.add('hidden');
         }
@@ -602,16 +682,6 @@ export default class extends Controller {
     
     console.log("Field signing controller found for field ID:", fieldId);
     
-    // Check if we need to use session storage as fallback
-    if (!signatureData && sessionStorage.getItem('last_signature_data')) {
-      console.log("Using signature data from session storage");
-      signatureData = sessionStorage.getItem('last_signature_data');
-      
-      // Clear session storage to prevent reuse
-      sessionStorage.removeItem('last_signature_data');
-      sessionStorage.removeItem('last_signature_field_id');
-    }
-    
     if (!signatureData || !fieldId) {
       console.error("Missing signature data or field ID", { signatureData: !!signatureData, fieldId });
       return;
@@ -628,16 +698,7 @@ export default class extends Controller {
     if (!field) {
       console.error(`Field not found with ID: ${fieldId}. Available fields:`, 
         this.fieldTargets.map(f => f.dataset.fieldId).join(', '));
-      
-      // Try a more generic approach by finding any field with the right type
-      const fields = this.fieldTargets.filter(f => f.dataset.fieldType === fieldType && !f.dataset.completed);
-      if (fields.length > 0) {
-        console.log(`Found ${fields.length} ${fieldType} fields that aren't completed yet. Using the first one.`);
-        field = fields[0];
-      } else {
-        console.error(`No ${fieldType} fields found that aren't completed yet.`);
-        return;
-      }
+      return;
     }
     
     // Update the field with the signature
@@ -647,6 +708,13 @@ export default class extends Controller {
     // Save font preference to the server
     if (fontKey) {
       this.saveFontPreference(fieldType, fontKey);
+      
+      // Store the font preference locally
+      if (fieldType === 'signature') {
+        this.signatureFontValue = fontKey;
+      } else if (fieldType === 'initials') {
+        this.initialsFontValue = fontKey;
+      }
     }
     
     // Close the modal
@@ -1173,14 +1241,20 @@ export default class extends Controller {
           field.style.width = `${fieldWidth}px`;
           field.style.height = `${fieldHeight}px`;
           
-          // Use transform for centering
+          // Center the field on its position point
           field.style.transform = 'translate(-50%, -50%)';
           
-          // Make field visible
-          field.classList.remove('hidden');
-          field.classList.add('positioned');
+          // Make sure the field is visible
+          field.style.zIndex = '100';
           
-          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
+          // Set appropriate styling based on completion status
+          const isCompleted = field.dataset.completed === "true";
+          field.style.border = isCompleted ? '2px solid #4CAF50' : '2px dashed #2563EB';
+          field.style.backgroundColor = isCompleted ? 'rgba(220, 252, 231, 0.7)' : 'rgba(239, 246, 255, 0.7)';
+          field.style.borderRadius = '4px';
+          field.style.cursor = 'pointer';
+          
+          console.log(`Positioned field ${field.dataset.fieldId} at x=${field.style.left}, y=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
         });
       });
     } catch (error) {
@@ -1243,7 +1317,7 @@ export default class extends Controller {
   // Handle input changes (not submitting yet)
   handleInputChange(event) {
     // Enable save button when typing starts
-    const field = event.currentTarget.closest('[data-field-signing-target="field"]');
+    const field = event.target.closest('[data-field-signing-target="field"]');
     const saveButton = field.querySelector('button');
     if (saveButton) {
       saveButton.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -1460,5 +1534,30 @@ export default class extends Controller {
     
     // Log the error for debugging
     console.error(`Showing persistent error: ${message}`);
+  }
+
+  // Check if we already have a signature for this signer
+  async checkForExistingSignature(field) {
+    if (!this.signerIdValue) return;
+    
+    try {
+      const url = `/sign/${this.documentIdValue}/get_font_preference?token=${this.tokenValue}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error(`Failed to get font preference: ${response.status}`);
+        return;
+      }
+      
+      const data = await response.json();
+      
+      // Store the font preferences
+      this.signatureFontValue = data.signature_font || null;
+      this.initialsFontValue = data.initials_font || null;
+      
+      console.log("Retrieved font preferences:", data);
+    } catch (error) {
+      console.error("Error getting font preference:", error);
+    }
   }
 } 

@@ -3,6 +3,11 @@
      data-signature-modal-target="modal"
      class="hidden fixed inset-0 items-center justify-center z-[1000]" 
      id="signingModal">
+  <!-- Modal backdrop -->
+  <div class="fixed inset-0 bg-black bg-opacity-50" 
+       data-signature-modal-target="backdrop"
+       data-action="click->signature-modal#close"></div>
+       
   <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 z-[1001] overflow-hidden">
     <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-blue-50">
       <h3 class="text-xl font-semibold text-gray-800">Complete Field</h3>
@@ -31,7 +36,8 @@
                id="signatureNameInput" 
                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
                placeholder="Enter your name"
-               data-signature-modal-target="nameInput">
+               data-signature-modal-target="nameInput"
+               data-action="input->signature-modal#handleNameInput">
       </div>
       
       <!-- Font Previews Container -->
@@ -61,73 +67,20 @@
       <div class="flex justify-between">
         <button type="button" 
                 class="px-4 py-2 text-base border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                onclick="document.getElementById('signingModal').classList.add('hidden'); return false;">
+                data-action="click->signature-modal#close">
           Cancel
         </button>
         <button type="button"
                 id="saveSignatureButton"
                 class="px-4 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick="
-                  const controller = document.getElementById('signingModal').__stimulusController;
-                  if (controller) {
-                    controller.saveSignature();
-                  } else {
-                    const name = document.getElementById('signatureNameInput').value || 'Your Signature';
-                    const fontKey = document.querySelector('#signatureFontPreviewsContainer .border-blue-500')?.dataset.fontKey;
-                    if (fontKey) {
-                      // Create a canvas to render the signature
-                      const canvas = document.createElement('canvas');
-                      canvas.width = 400;
-                      canvas.height = 150;
-                      const ctx = canvas.getContext('2d');
-                      
-                      // Set font and draw text
-                      const fontFamily = fontKey === 'handwriting1' ? 'Cedarville Cursive' : 
-                                         fontKey === 'handwriting2' ? 'Dancing Script' : 
-                                         'Shadows Into Light';
-                      ctx.font = `60px ${fontFamily}`;
-                      ctx.fillStyle = 'black';
-                      ctx.textAlign = 'center';
-                      ctx.textBaseline = 'middle';
-                      ctx.fillText(name, 200, 75);
-                      
-                      // Get the image URL
-                      const imageUrl = canvas.toDataURL('image/png');
-                      
-                      // Find the current field
-                      const fieldId = window.currentFieldId;
-                      const field = document.querySelector(`[data-field-id='${fieldId}']`);
-                      
-                      if (field) {
-                        // Update the field
-                        field.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.src = imageUrl;
-                        img.className = 'w-full h-full object-contain p-1';
-                        field.appendChild(img);
-                        
-                        // Mark as completed
-                        field.dataset.completed = 'true';
-                        field.style.border = '2px solid #4CAF50';
-                        field.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
-                      }
-                      
-                      // Close modal
-                      document.getElementById('signingModal').classList.add('hidden');
-                    } else {
-                      alert('Please select a signature style');
-                    }
-                  }
-                  return false;
-                "
-                disabled>
+                data-action="click->signature-modal#saveSignature">
           Save Signature
         </button>
       </div>
     </div>
     
     <!-- Initials Content -->
-    <div class="modal-content p-6 hidden" data-field-type="initials" data-signature-modal-target="initialsContainer" style="display:none;">
+    <div class="modal-content p-6 hidden" data-field-type="initials" data-signature-modal-target="initialsContainer">
       <div class="mb-4">
         <h4 class="text-lg font-medium text-gray-700 mb-2">Select Your Initials Style</h4>
         <p class="text-sm text-gray-500">Choose a handwriting style for your initials.</p>
@@ -141,14 +94,15 @@
                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
                placeholder="Enter your initials (e.g., JD)"
                maxlength="3"
-               data-signature-modal-target="initialsInput">
+               data-signature-modal-target="nameInput"
+               data-action="input->signature-modal#handleNameInput">
       </div>
       
       <!-- Font Previews Container -->
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">Select Style</label>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3" 
-             data-signature-modal-target="initialsFontPreviewsContainer"
+             data-signature-modal-target="fontPreviewsContainer"
              id="initialsFontPreviewsContainer">
           <!-- Font previews will be inserted here by JavaScript -->
         </div>
@@ -157,12 +111,12 @@
       <!-- Initials Preview -->
       <div class="bg-gray-50 border border-gray-300 rounded-md overflow-hidden mb-4">
         <div class="relative w-full h-28 flex items-center justify-center" 
-             data-signature-modal-target="initialsPreviewContainer">
-          <div class="text-gray-400 text-sm" data-signature-modal-target="initialsPreviewPlaceholder">
+             data-signature-modal-target="previewContainer">
+          <div class="text-gray-400 text-sm" data-signature-modal-target="previewPlaceholder">
             Your initials preview will appear here
           </div>
           <canvas id="initialsPreviewCanvas" 
-                  data-signature-modal-target="initialsPreviewCanvas"
+                  data-signature-modal-target="previewCanvas"
                   class="w-full h-full hidden"></canvas>
         </div>
       </div>
@@ -171,66 +125,13 @@
       <div class="flex justify-between">
         <button type="button" 
                 class="px-4 py-2 text-base border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                onclick="document.getElementById('signingModal').classList.add('hidden'); return false;">
+                data-action="click->signature-modal#close">
           Cancel
         </button>
         <button type="button"
                 id="saveInitialsButton"
                 class="px-4 py-2 text-base bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick="
-                  const controller = document.getElementById('signingModal').__stimulusController;
-                  if (controller) {
-                    controller.saveInitials();
-                  } else {
-                    const initials = document.getElementById('initialsInput').value || 'JD';
-                    const fontKey = document.querySelector('#initialsFontPreviewsContainer .border-blue-500')?.dataset.fontKey;
-                    if (fontKey) {
-                      // Create a canvas to render the initials
-                      const canvas = document.createElement('canvas');
-                      canvas.width = 200;
-                      canvas.height = 100;
-                      const ctx = canvas.getContext('2d');
-                      
-                      // Set font and draw text
-                      const fontFamily = fontKey === 'handwriting1' ? 'Cedarville Cursive' : 
-                                         fontKey === 'handwriting2' ? 'Dancing Script' : 
-                                         'Shadows Into Light';
-                      ctx.font = `60px ${fontFamily}`;
-                      ctx.fillStyle = 'black';
-                      ctx.textAlign = 'center';
-                      ctx.textBaseline = 'middle';
-                      ctx.fillText(initials, 100, 50);
-                      
-                      // Get the image URL
-                      const imageUrl = canvas.toDataURL('image/png');
-                      
-                      // Find the current field
-                      const fieldId = window.currentFieldId;
-                      const field = document.querySelector(`[data-field-id='${fieldId}']`);
-                      
-                      if (field) {
-                        // Update the field
-                        field.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.src = imageUrl;
-                        img.className = 'w-full h-full object-contain p-1';
-                        field.appendChild(img);
-                        
-                        // Mark as completed
-                        field.dataset.completed = 'true';
-                        field.style.border = '2px solid #4CAF50';
-                        field.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
-                      }
-                      
-                      // Close modal
-                      document.getElementById('signingModal').classList.add('hidden');
-                    } else {
-                      alert('Please select an initials style');
-                    }
-                  }
-                  return false;
-                "
-                disabled>
+                data-action="click->signature-modal#saveSignature">
           Save Initials
         </button>
       </div>
@@ -283,7 +184,4 @@
       </form>
     </div>
   </div>
-</div>
-
-<!-- Separate backdrop element -->
-<div data-signature-modal-target="backdrop" id="modalBackdrop" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[999]"></div> 
+</div> 
