@@ -73,9 +73,9 @@ export default class extends Controller {
       this.backdropTarget.addEventListener('click', this.close.bind(this));
     }
     
-    // Setup escape key handler
-    this.escapeHandler = (e) => {
-      if (e.key === 'Escape' && !this.modalTarget.classList.contains('hidden')) {
+    // Correct Escape key handler
+    this.escapeHandler = (event) => {
+      if (event.key === 'Escape' && !this.modalTarget.classList.contains('hidden')) {
         this.close();
       }
     };
@@ -878,23 +878,21 @@ export default class extends Controller {
     console.log("Closing modal");
     
     // Hide modal
-    if (this.hasBackdropTarget) {
-      this.backdropTarget.classList.add('hidden');
-      this.backdropTarget.style.display = 'none';
-    }
-    
     if (this.hasModalTarget) {
       this.modalTarget.classList.add('hidden');
       this.modalTarget.style.display = 'none';
     }
-    
-    // Ensure body is visible
-    document.body.style.removeProperty('overflow');
-    document.body.style.display = 'block';
-    
-    // Resume PDF rendering
+
+    // Explicitly hide backdrop
+    const backdrop = document.getElementById('modalBackdrop');
+    if (backdrop) {
+      backdrop.classList.add('hidden');
+      backdrop.style.display = 'none';
+    }
+
+    // Resume PDF viewer
     document.dispatchEvent(new CustomEvent('pdf-viewer:unpause'));
-    
+
     // Force redraw to prevent black screen
     setTimeout(() => {
       document.body.style.opacity = 0.99;

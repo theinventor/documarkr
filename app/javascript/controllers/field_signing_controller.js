@@ -1176,7 +1176,7 @@ export default class extends Controller {
           field.classList.remove('hidden');
           field.classList.add('positioned');
           
-          console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
+          //console.log(`Positioned field ${field.dataset.fieldId} at: left=${field.style.left}, top=${field.style.top}, width=${field.style.width}, height=${field.style.height}`);
         });
       });
     } catch (error) {
@@ -1369,22 +1369,22 @@ export default class extends Controller {
     console.log(`Required fields: ${requiredFields.length}`);
     
     // Log details of each field
-    this.fieldTargets.forEach((field, index) => {
-      console.log(`Field ${index + 1}:`);
-      console.log(`  ID: ${field.dataset.fieldId}`);
-      console.log(`  Type: ${field.dataset.fieldType}`);
-      console.log(`  Required: ${field.dataset.required}`);
-      console.log(`  Completed: ${field.dataset.completed}`);
-      console.log(`  Page: ${field.dataset.page}`);
+    // this.fieldTargets.forEach((field, index) => {
+    //   console.log(`Field ${index + 1}:`);
+    //   console.log(`  ID: ${field.dataset.fieldId}`);
+    //   console.log(`  Type: ${field.dataset.fieldType}`);
+    //   console.log(`  Required: ${field.dataset.required}`);
+    //   console.log(`  Completed: ${field.dataset.completed}`);
+    //   console.log(`  Page: ${field.dataset.page}`);
       
-      // Check if field has any content
-      const hasContent = field.querySelector('img') !== null || 
-                         field.querySelector('div:not(.text-input-container)') !== null;
-      console.log(`  Has Content: ${hasContent}`);
+    //   // Check if field has any content
+    //   const hasContent = field.querySelector('img') !== null || 
+    //                      field.querySelector('div:not(.text-input-container)') !== null;
+    //   console.log(`  Has Content: ${hasContent}`);
       
-      // Check field styles
-      console.log(`  Style: border=${field.style.border}, bg=${field.style.backgroundColor}`);
-    });
+    //   // Check field styles
+    //   console.log(`  Style: border=${field.style.border}, bg=${field.style.backgroundColor}`);
+    // });
     
     // Return a status object for potential display
     return {
