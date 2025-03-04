@@ -1,4 +1,5 @@
 # Jun 26, 2024: Created initializer to document email configuration environment variables
+# Jun 26, 2024: Updated to use direct SMTP configuration instead of Postmark gem
 
 # Email Configuration Options
 #
@@ -25,5 +26,11 @@
 # For Heroku, you can set them with:
 #   heroku config:set APPLICATION_HOST=yourdomain.com EMAIL_FROM_ADDRESS=notifications@yourdomain.com
 #
-# Email configuration itself is done in config/environments/production.rb using Postmark
-# and the API token is stored in Rails credentials.
+# Email configuration uses standard SMTP settings in config/environments/production.rb
+# and the Postmark API token (used as both username and password) is stored in Rails credentials under:
+#
+# postmark:
+#   api_token: your_postmark_token
+#
+# To add this to your credentials, run:
+#   EDITOR=vim bin/rails credentials:edit

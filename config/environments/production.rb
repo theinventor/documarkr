@@ -56,7 +56,7 @@ Rails.application.configure do
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
   config.action_mailer.raise_delivery_errors = true
-  config.action_mailer.delivery_method = :postmark
+  config.action_mailer.delivery_method = :smtp
 
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: ENV.fetch("APPLICATION_HOST", "documarkr.com"), protocol: "https" }
@@ -66,19 +66,14 @@ Rails.application.configure do
     from: ENV.fetch("EMAIL_FROM_ADDRESS", "no-reply@#{ENV.fetch('APPLICATION_HOST', 'documarkr.com')}")
   }
 
-  # Configure postmark
-  config.action_mailer.postmark_settings = {
-    api_token: Rails.application.credentials.dig(:postmark, :api_token)
-  }
-
-  # Backup SMTP configuration in case needed
+  # SMTP configuration for Postmark
   config.action_mailer.smtp_settings = {
     address: "smtp.postmarkapp.com",
     port: 587,
     authentication: :plain,
     user_name: Rails.application.credentials.dig(:postmark, :api_token),
     password: Rails.application.credentials.dig(:postmark, :api_token),
-    domain: ENV.fetch("APPLICATION_HOST", "documarkr.com"),
+    domain: ENV.fetch("EMAIL_DOMAIN", "documarkr.com"),
     enable_starttls_auto: true
   }
 

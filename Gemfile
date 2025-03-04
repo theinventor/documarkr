@@ -21,10 +21,7 @@ gem "jbuilder"
 gem "devise"
 # Authorization
 gem "cancancan"
-# PDF manipulation
-gem "hexapdf"
-# Email delivery with Postmark
-gem "postmark-rails"
+
 # Background processing
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
