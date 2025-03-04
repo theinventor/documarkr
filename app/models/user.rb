@@ -35,7 +35,7 @@ class User < ApplicationRecord
     signer: "signer",
     creator: "creator",
     admin: "admin"
-  }, default: "signer"
+  }, default: "admin"
 
   def name
     "#{first_name} #{last_name}".strip.presence || email
