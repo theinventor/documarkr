@@ -1220,7 +1220,10 @@ export default class extends Controller {
             
             // 4. Fallback to direct DOM manipulation
             if (fieldId) {
-              const fieldElement = document.querySelector(`[data-field-id="${fieldId}"]`);
+              // Use a more specific selector to target ONLY the field on the document, not the sidebar
+              // The key attribute we're looking for is data-field-signing-target="field"
+              const fieldElement = document.querySelector(`[data-field-signing-target="field"][data-field-id="${fieldId}"]`);
+              
               if (fieldElement) {
                 console.log("Updating field element directly:", fieldId);
                 
@@ -1238,15 +1241,19 @@ export default class extends Controller {
                 fieldElement.style.border = '2px solid #4CAF50';
                 fieldElement.style.backgroundColor = 'rgba(220, 252, 231, 0.7)';
                 
-                // Update field status in sidebar
+                // Update field status in sidebar - use more specific selector for status item
                 const statusItem = document.querySelector(`.field-status-item[data-field-id="${fieldId}"]`);
                 if (statusItem) {
                   statusItem.dataset.fieldStatus = 'completed';
+                  
+                  // Only update the status circle, nothing else
                   const statusCircle = statusItem.querySelector('.field-status');
                   if (statusCircle) {
                     statusCircle.classList.remove('bg-gray-300');
                     statusCircle.classList.add('bg-green-500');
                   }
+                  
+                  // Important: Don't modify any other content in the sidebar item
                 }
               }
             }
