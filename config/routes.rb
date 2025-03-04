@@ -13,6 +13,7 @@ Rails.application.routes.draw do
   get "sign/:id/:token", to: "public_signing#show", as: "public_sign_document"
   post "sign/:id", to: "public_signing#sign_complete", as: "public_sign_complete"
   post "sign/:id/form_fields/:field_id/complete", to: "public_signing#complete_field", as: "public_complete_field"
+  get '/sign/:id/form_fields/:field_id/status', to: 'public_signing#field_status', as: 'public_field_status'
 
   resources :documents do
     member do

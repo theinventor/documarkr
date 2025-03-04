@@ -835,9 +835,11 @@ export default class extends Controller {
           const verifyData = await verifyResponse.json();
           console.log(`Field verification result:`, verifyData);
           
-          if (!verifyData.completed) {
+          if (!verifyData.field || verifyData.field.completed !== true) {
             console.error(`Field ${dbId} save verification failed: Server reports field as not completed!`);
             this.showPersistentError(`Warning: Server did not confirm field completion. There may be synchronization issues.`);
+          } else {
+            console.log(`Field ${dbId} verification successful. Confirmed as completed.`);
           }
         } else {
           console.warn(`Could not verify field save status: ${verifyResponse.status}`);
