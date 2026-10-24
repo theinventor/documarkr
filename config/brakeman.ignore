@@ -1,0 +1,17 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Unmaintained Dependency",
+      "warning_code": 122,
+      "fingerprint": "98b26f60d776fd41ee6f088c833725145be9aac2d7c5b33780241c273622db42",
+      "check_name": "EOLRails",
+      "message": "Support for Rails 8.0 ends on 2026-11-07",
+      "file": "Gemfile.lock",
+      "link": "https://brakemanscanner.org/docs/warning_types/unmaintained_dependency/",
+      "confidence": "Medium",
+      "note": "Rails 8.0 to 8.1 is a separate framework upgrade from this emergency Ruby patch."
+    }
+  ],
+  "updated": "2026-10-24 09:47:00 -0700",
+  "brakeman_version": "8.1.0"
+}
