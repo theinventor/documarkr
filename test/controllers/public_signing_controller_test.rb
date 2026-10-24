@@ -1,18 +1,18 @@
 require "test_helper"
 
 class PublicSigningControllerTest < ActionDispatch::IntegrationTest
-  test "should get show" do
-    get public_signing_show_url
-    assert_response :success
+  test "show redirects an invalid signing link" do
+    get public_sign_document_url(id: -1, token: "missing")
+    assert_redirected_to root_url
   end
 
-  test "should get sign_complete" do
-    get public_signing_sign_complete_url
-    assert_response :success
+  test "sign complete redirects an invalid signing link" do
+    post public_sign_complete_url(id: -1), params: { token: "missing" }
+    assert_redirected_to root_url
   end
 
-  test "should get complete" do
-    get public_signing_complete_url
-    assert_response :success
+  test "complete redirects an invalid document" do
+    get public_sign_complete_view_url(id: -1)
+    assert_redirected_to root_url
   end
 end
