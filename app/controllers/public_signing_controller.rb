@@ -1,7 +1,7 @@
 class PublicSigningController < ApplicationController
   # Skip authentication for all actions in this controller
-  skip_before_action :authenticate_user!, only: [ :show, :sign_complete, 
-  :complete, :complete_field, :thank_you, :field_status ]
+  skip_before_action :authenticate_user!, only: [ :show, :sign_complete,
+                                                   :complete, :complete_field, :thank_you, :field_status ]
 
   # GET /sign/:id/:token
   def show
@@ -23,21 +23,21 @@ class PublicSigningController < ApplicationController
   end
 
   # app/controllers/public_signing_controller.rb
-def field_status
-  document = Document.find(params[:id])
-  field = document.form_fields.find(params[:field_id])
+  def field_status
+    document = Document.find(params[:id])
+    field = document.form_fields.find(params[:field_id])
 
-  render json: {
-    success: true,
-    field: {
-      id: field.id,
-      completed: field.completed,
-      value: field.value
+    render json: {
+      success: true,
+      field: {
+        id: field.id,
+        completed: field.completed,
+        value: field.value
+      }
     }
-  }
-rescue ActiveRecord::RecordNotFound
-  render json: { success: false, error: "Field not found" }, status: :not_found
-end
+  rescue ActiveRecord::RecordNotFound
+    render json: { success: false, error: "Field not found" }, status: :not_found
+  end
 
   # POST /sign/:id
   def sign_complete
