@@ -88,8 +88,8 @@ GEM
     bindex (0.8.1)
     binding_of_caller (1.0.1)
       debug_inspector (>= 1.2.0)
-    bootsnap (1.18.4)
-      msgpack (~> 1.2)
+    bootsnap (1.26.1)
+      msgpack (~> 1.5)
     brakeman (8.1.0)
       racc
     builder (3.3.0)
@@ -195,7 +195,7 @@ GEM
       logger
     mini_mime (1.1.5)
     minitest (5.25.4)
-    msgpack (1.8.0)
+    msgpack (1.8.7)
     net-imap (0.5.6)
       date
       net-protocol
