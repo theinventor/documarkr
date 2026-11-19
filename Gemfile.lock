@@ -195,7 +195,7 @@ GEM
       logger
     mini_mime (1.1.5)
     minitest (5.25.4)
-    msgpack (1.8.0)
+    msgpack (1.8.7)
     net-imap (0.5.6)
       date
       net-protocol
@@ -243,7 +243,7 @@ GEM
       date
       stringio
     public_suffix (6.0.1)
-    puma (6.6.0)
+    puma (7.2.3)
       nio4r (~> 2.0)
     raabro (1.4.0)
     racc (1.8.1)
@@ -440,7 +440,7 @@ DEPENDENCIES
   letter_opener
   letter_opener_web
   propshaft
-  puma (>= 5.0)
+  puma (~> 7.2, >= 7.2.2)
   rails (~> 8.0.5, >= 8.0.5.2)
   rubocop-rails-omakase
   selenium-webdriver
